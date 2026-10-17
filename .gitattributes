@@ -1,0 +1,3 @@
+# Normalize to LF in the repository. The deployment targets are Linux
+# (Cloud Shell and the Cloud Run container), so CRLF must never be committed.
+* text=auto eol=lf
