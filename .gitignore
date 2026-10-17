@@ -3,3 +3,5 @@
 *.tfstate.*
 terraform.tfvars
 benchmark-*.csv
+__pycache__/
+.tmp-verify/
