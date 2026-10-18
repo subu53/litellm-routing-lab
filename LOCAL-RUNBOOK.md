@@ -23,8 +23,23 @@ routing and cost-evidence project, not a cloud-deployment project.
 2. Sign in (Google or GitHub)
 3. **Create API Key**, copy it
 
-No card. The free tier allows 14,400 requests/day on Llama 3.1 8B and 1,000/day on
-Llama 3.3 70B. This project uses under 20 requests.
+No card. Groq's free tier covers this workload many times over — the project makes
+under 20 requests in total.
+
+**Check which models your account actually has** before starting the proxy. Groq's
+catalogue varies by account and changes over time, and `config.free.yaml` assumes
+these two exist:
+
+```bash
+curl -s https://api.groq.com/openai/v1/models \
+  -H "Authorization: Bearer $GROQ_API_KEY" \
+  | grep -o '"id":"[^"]*"' | cut -d'"' -f4 | sort
+```
+
+The config expects `openai/gpt-oss-20b` (cheap tier) and `openai/gpt-oss-120b`
+(strong tier). If your catalogue differs, edit only the two `model:` lines in
+`config.free.yaml` — the `model_name:` aliases must stay as they are, because the
+router tiers reference them.
 
 Store it without putting it in your shell history:
 
@@ -102,7 +117,7 @@ key is simpler and equivalent for benchmarking.)
 python3 benchmark.py baseline
 ```
 
-Expect four rows, all `returned=llama-3.3-70b-versatile` (the `gemini-flash` alias).
+Expect four rows, all `returned=openai/gpt-oss-120b` (the `gemini-flash` alias).
 Every prompt paid for the big model. That is the waste.
 
 ```bash
@@ -110,7 +125,7 @@ python3 benchmark.py routed
 ```
 
 Expect `returned_model` to vary by complexity — simple prompts on
-`llama-3.1-8b-instant`, harder ones on `llama-3.3-70b-versatile`.
+`openai/gpt-oss-20b`, harder ones on `openai/gpt-oss-120b`.
 
 If every routed row still shows the big model, the heuristic scorer put everything
 above the MEDIUM boundary. That is a real finding, not necessarily a bug — it means
@@ -174,7 +189,7 @@ gitignored.
 
 | | Paid (`RUNBOOK.md`) | Free (this file) |
 |---|---|---|
-| Models | Vertex AI Gemini | Groq Llama (free tier) |
+| Models | Vertex AI Gemini | Groq gpt-oss 20b/120b (free tier) |
 | Classifier | Jev (paid, needs TypeSafe) | heuristic scorer (free built-in) |
 | State | Cloud SQL Postgres | in-process, no persistence |
 | Auth | Secret Manager | shell variable |
