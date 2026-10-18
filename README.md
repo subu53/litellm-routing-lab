@@ -157,7 +157,49 @@ python3 benchmark.py routed
 Each row records `case`, `expected_tier`, `requested_model`, `returned_model`,
 `latency_ms`, and `classifier_cost_header`. On the free path
 `classifier_cost_header` is always empty — the heuristic scorer is local and free,
-which is itself the headline result.
+which is itself a headline result.
+
+Transient `429`/`503` responses are retried with exponential backoff. A retried case
+reports the successful attempt's latency, not the total including backoff. If a case
+still fails, the completed rows are kept, the CSV is flagged incomplete, and the run
+does not claim to be a valid comparison.
+
+### Measured results (Gemini free path)
+
+Four prompts, one run each, on a free-tier key. `config.gemini.yaml`, so the baseline
+tier is `gemini-3.5-flash` and the cheap tier is `gemini-3.1-flash-lite`.
+
+| Case | Expected tier | Baseline model | Baseline ms | Routed model | Routed ms |
+|---|---|---|---|---|---|
+| simple | SIMPLE | gemini-3.5-flash | 1,525 | gemini-3.1-flash-lite | 7,573 |
+| short_explanation | MEDIUM | gemini-3.5-flash | 2,551 | gemini-3.1-flash-lite | 1,632 |
+| architecture | COMPLEX | gemini-3.5-flash | 7,101 | gemini-3.1-flash-lite | 2,065 |
+| tradeoff | REASONING | gemini-3.5-flash | 15,392 | gemini-3.1-flash-lite | 6,582 |
+
+Average latency 6,642 ms baseline vs 4,463 ms routed. Classifier cost empty on every
+routed row.
+
+**What this shows.** Without routing, the same model served a one-word prompt and a
+reasoning prompt whose measured latency differed by **10×** (1,525 ms vs 15,392 ms).
+That spread is the waste this project targets, and it is measured rather than assumed.
+
+**What this does not show.** The heuristic scorer sent **all four prompts to the cheap
+tier**, including the REASONING case, so `gemini-3.5-flash` was never selected by the
+router and has no routed-path latency here. The 33% average latency drop is therefore
+"a smaller model was used for everything", not evidence of correct complexity routing.
+Lowering `tier_boundaries` from the documented defaults to 0.10/0.25/0.45 did not
+change this.
+
+**Two measurement caveats.** The `simple` routed case at 7,573 ms is 5× its baseline and
+consistent with provider cold start rather than routing overhead, so case 1 of a run is
+unreliable. Rows are single samples, not averages.
+
+**Honest conclusion.** The routing mechanism works — aliases resolve, the tier model
+serves the request, and `return_raw_model_name` exposes the decision. The *quality of the
+classification* does not: a keyword-and-score heuristic rated a step-by-step tradeoff
+analysis as cheap-tier. This is the gap a learned classifier is meant to close, and the
+reason classifying with a decision model such as Jev is a paid product. A defended
+limitation is a more useful portfolio result than an unearned win.
 
 ## Cost
 

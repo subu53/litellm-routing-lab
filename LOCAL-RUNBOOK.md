@@ -199,3 +199,26 @@ gitignored.
 
 Both use the same `benchmark.py` and the same router semantics, so the measurement
 method transfers directly if you later run the paid path.
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `KeyError: 'LITELLM_BASE_URL'` | env vars not exported in this session | export both, see step 4 |
+| `Invalid API Key` from the provider, but `curl` with the same key works | the proxy started before the key was exported, so it holds a stale environment | kill the proxy, confirm the key, restart |
+| `No module named 'orjson'` | running outside the venv | `cd ~/litellm-routing-lab && source .venv/bin/activate`, then check `which litellm` |
+| `port 4000 already in use` | an old proxy is still running | `pkill -f litellm`, wait 3s, restart |
+| `503 UNAVAILABLE` / `429` | provider capacity, not your config | the benchmark retries automatically; if it persists, wait or swap the strong-tier model |
+| Every routed row shows the cheap model | the heuristic scorer rates these prompts low | expected result; see the measured-results section in README |
+
+**Checking a credential the proxy actually received.** A shell variable and the
+proxy's copy can differ. Compare the byte count inside the process, not in your shell:
+
+```bash
+tr '\0' '\n' < /proc/$(pgrep -f "litellm --config" | head -1)/environ \
+  | grep '^GEMINI_API_KEY=' | sed 's/^GEMINI_API_KEY=//' | tr -d '\n' | wc -c
+```
+
+The `tr -d '\n'` matters: without it `wc -c` counts grep's trailing newline and reports
+one byte too many, which looks exactly like a stray character in the key. Verify the
+measurement before concluding the credential is wrong.
