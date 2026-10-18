@@ -1,14 +1,16 @@
 model_list:
   # Cheap tier: small fast model, mirrors the role of a Flash-Lite model.
+  # Model IDs verified against Groq's live catalogue: Llama models are not
+  # available on this account, so the gpt-oss ladder is used instead.
   - model_name: gemini-flash-lite
     litellm_params:
-      model: groq/llama-3.1-8b-instant
+      model: groq/openai/gpt-oss-20b
       api_key: os.environ/GROQ_API_KEY
 
   # Strong tier: larger model, mirrors the role of a full Flash model.
   - model_name: gemini-flash
     litellm_params:
-      model: groq/llama-3.3-70b-versatile
+      model: groq/openai/gpt-oss-120b
       api_key: os.environ/GROQ_API_KEY
 
   # Complexity router using LiteLLM's built-in heuristic scorer.
