@@ -45,6 +45,26 @@ def run_case(base_url, api_key, requested_model, case_name, expected_tier, promp
             "classifier_cost_header": response.headers.get("x-litellm-classifier-cost", ""),
         }
 
+def run_case_with_retry(base_url, api_key, requested_model, case_name,
+                        expected_tier, prompt, attempts=3):
+    # Free tiers return 503/429 under load. Retry those, keep the last latency
+    # only, and never retry a real client error such as 400 or 401.
+    #
+    # A retried case reports the latency of the successful attempt, not the
+    # total time including backoff, so comparisons stay meaningful.
+    for attempt in range(1, attempts + 1):
+        try:
+            return run_case(base_url, api_key, requested_model, case_name,
+                            expected_tier, prompt)
+        except urllib.error.HTTPError as error:
+            retryable = error.code in (429, 500, 502, 503, 504)
+            if not retryable or attempt == attempts:
+                raise
+            wait = 2 ** attempt
+            print(f"  {case_name}: HTTP {error.code}, retrying in {wait}s "
+                  f"(attempt {attempt}/{attempts})", file=sys.stderr)
+            time.sleep(wait)
+
 def require_env(name):
     # Fail with an actionable message instead of a bare KeyError.
     value = os.environ.get(name)
@@ -65,15 +85,24 @@ def main():
     mode = sys.argv[1]
     rows = []
     # Run every case and print its routing result immediately.
-    try:
-        for case_name, expected_tier, prompt in CASES:
-            row = run_case(base_url, api_key, MODELS[mode], case_name, expected_tier, prompt)
-            rows.append(row)
-            print(f"{case_name:18} expected={expected_tier:9} returned={row['returned_model']:28} latency_ms={row['latency_ms']:8} classifier_cost={row['classifier_cost_header'] or 'n/a'}")
-    except urllib.error.HTTPError as error:
-        detail = error.read().decode("utf-8", errors="replace")
-        print(f"HTTP {error.code}: {detail}", file=sys.stderr)
-        raise SystemExit(1) from error
+    for case_name, expected_tier, prompt in CASES:
+        try:
+            row = run_case_with_retry(
+                base_url, api_key, MODELS[mode], case_name, expected_tier, prompt)
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")
+            print(f"\nHTTP {error.code} on {case_name}: {detail}", file=sys.stderr)
+            # Keep whatever completed: a partial report beats no report, and a
+            # partial row count is obvious in the output.
+            if rows:
+                print(f"Stopping after {len(rows)} completed case(s). "
+                      "The CSV written below is incomplete.", file=sys.stderr)
+                break
+            raise SystemExit(1) from error
+        rows.append(row)
+        print(f"{case_name:18} expected={expected_tier:9} returned={row['returned_model']:28} latency_ms={row['latency_ms']:8} classifier_cost={row['classifier_cost_header'] or 'n/a'}")
+    if not rows:
+        raise SystemExit("No cases completed; nothing to report.")
     output_path = f"benchmark-{mode}.csv"
     # Save a reusable report and print the aggregate result.
     with open(output_path, "w", newline="", encoding="utf-8") as output_file:
@@ -85,5 +114,8 @@ def main():
     print(f"\nWrote {output_path}")
     print(f"Model counts: {dict(counts)}")
     print(f"Average latency: {average_latency} ms")
+    if len(rows) < len(CASES):
+        print(f"INCOMPLETE: {len(rows)} of {len(CASES)} cases ran. "
+              "Re-run before treating these numbers as a comparison.")
 if __name__ == "__main__":
     main()
