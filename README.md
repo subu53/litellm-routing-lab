@@ -88,6 +88,7 @@ transfers. The free path never adds a payment method.
 | `outputs.tf` | `service_url`, `admin_url`, `image_uri` |
 | `config.yaml` | Paid path: Gemini aliases + Jev complexity router |
 | `config.free.yaml` | Free path: Groq gpt-oss aliases + heuristic complexity router |
+| `config.gemini.yaml` | Free path: Google AI Studio Gemini aliases + heuristic router |
 | `Dockerfile` | Pins LiteLLM 1.104.0 and bakes in `config.yaml` |
 | `benchmark.py` | Four-case baseline vs. routed benchmark, writes CSV evidence |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and set your project ID |
@@ -162,8 +163,13 @@ which is itself the headline result.
 
 | Path | Cost | Notes |
 |---|---|---|
+| Free (`config.gemini.yaml`) | **$0** | Google AI Studio free tier, real Gemini models, no card |
 | Free (`config.free.yaml`) | **$0** | Groq free tier, no card, no GCP resources |
 | Paid (`config.yaml`) | **~$5** | under $5 if destroyed within two hours |
+
+Google AI Studio free-tier limits per model (requests/day): Gemini 3 Flash 20,
+Gemini 3.1 Flash-Lite 500, Gemini 2.5 Flash 20. The router consumes 4 requests per
+benchmark, so either free path is comfortably inside quota.
 
 On the paid path, Cloud SQL compute and storage are the only meaningful standing
 charges. Note that the `$1` LiteLLM virtual-key budget caps gateway traffic only — it
@@ -178,16 +184,20 @@ gcloud secrets delete typesafe-api-key   # created outside Terraform
 
 ## Notes and caveats
 
-- **Verify the model IDs before deploying.** `config.yaml` ships with
-  `vertex_ai/gemini-3.5-flash` and `vertex_ai/gemini-3.5-flash-lite`, copied from the
-  source project. I could not confirm those identifiers exist in Vertex AI, and there is
-  public evidence against it — see the StackOverflow report that BigQuery rejects a
-  `gemini-3.5-flash` model and the `gemini-cli` issue on `gemini-3.5-flash` failing over
-  Vertex. The catalogue appears to offer `gemini-3-flash` and `gemini-2.5-flash` /
-  `gemini-2.5-flash-lite`. Step 3 of the runbook checks this against your own project and
-  tells you how to substitute. The aliases (`gemini-flash`, `gemini-flash-lite`,
-  `jev-router`) are what the router references and do not change — only the `model:`
-  lines under `litellm_params`.
+- **`gemini-3.5-flash` is real; `gemini-3.5-flash-lite` is not.** An earlier revision of
+  this README claimed both were fabricated. That was wrong. Gemini 3.5 Flash shipped at
+  general availability at Google I/O 2026 under the model ID `gemini-3.5-flash`, priced at
+  $1.50/million input and $9/million output. However, **no 3.5 Flash-Lite exists** — the
+  Flash-Lite line is at `gemini-3.1-flash-lite`, so the source project's pairing invents a
+  variant. `config.yaml` still ships the source project's `vertex_ai/gemini-3.5-flash` /
+  `vertex_ai/gemini-3.5-flash-lite` pair; the second one must be replaced before deploying.
+  Step 3 of the runbook checks the catalogue against your own project.
+- **Model IDs differ per path, aliases never change.** The router references
+  `gemini-flash`, `gemini-flash-lite`, and `jev-router`, which are stable across all three
+  configs. Only the `model:` lines under `litellm_params` differ:
+  - `config.yaml` (paid, Vertex AI): `vertex_ai/gemini-*`
+  - `config.free.yaml` (free, Groq): `groq/openai/gpt-oss-20b` / `groq/openai/gpt-oss-120b`
+  - `config.gemini.yaml` (free, Gemini API): `gemini/gemini-3.1-flash-lite` / `gemini/gemini-3-flash`
 - **Nothing was validated locally beyond syntax.** This repository was authored on Windows
   with no `terraform`, `gcloud`, or `docker` available. `main.tf` has **not** passed
   `terraform validate`, and no `terraform plan` or `apply` has been run. Treat the first

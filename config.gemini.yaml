@@ -1,0 +1,44 @@
+model_list:
+  # Free path using Google AI Studio (Gemini API), no billing account required.
+  # Model IDs verified against the published free-tier catalogue:
+  #   gemini-3.1-flash-lite  500 req/day   <- the real lite model
+  #   gemini-3-flash          20 req/day
+  # Note: gemini-3.5-flash exists (GA, $1.50/M input) but is a premium model;
+  # it is not listed on the free tier. Swap it in for the strong tier if your
+  # key has quota for it.
+  - model_name: gemini-flash-lite
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-flash
+    litellm_params:
+      model: gemini/gemini-3-flash
+      api_key: os.environ/GEMINI_API_KEY
+
+  # Complexity router using LiteLLM's built-in heuristic scorer.
+  # Same aliases and tiers as config.yaml and config.free.yaml, so benchmark.py
+  # measures the same thing on every path.
+  - model_name: jev-router
+    litellm_params:
+      model: auto_router/complexity_router
+      complexity_router_default_model: gemini-flash
+      complexity_router_config:
+        tiers:
+          SIMPLE: gemini-flash-lite
+          MEDIUM: gemini-flash-lite
+          COMPLEX: gemini-flash
+          REASONING: gemini-flash
+        classifier_type: heuristic
+        classifier_fallback: heuristic
+        classifier_context_window_size: 3
+        classifier_context_budget_chars: 8000
+        classifier_context_include_assistant_turns: false
+        return_raw_model_name: true
+        tier_boundaries:
+          simple_medium: 0.10
+          medium_complex: 0.25
+          complex_reasoning: 0.45
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

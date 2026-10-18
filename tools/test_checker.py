@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "tools" / "check_structure.py"
 FILES = ["main.tf", "outputs.tf", "variables.tf", "versions.tf",
-         "config.yaml", "config.free.yaml", "Dockerfile",
+         "config.yaml", "config.free.yaml", "config.gemini.yaml", "Dockerfile",
          "terraform.tfvars.example", "benchmark.py"]
 
 results = []

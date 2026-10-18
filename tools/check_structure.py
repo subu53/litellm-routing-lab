@@ -204,7 +204,7 @@ for name in ("main.tf", "outputs.tf", "variables.tf", "versions.tf"):
     hcl_files.append(path)
     declared |= check_hcl(path)
 check_references(declared, hcl_files)
-for config_name in ("config.yaml", "config.free.yaml"):
+for config_name in ("config.yaml", "config.free.yaml", "config.gemini.yaml"):
     config_path = ROOT / config_name
     if config_path.exists():
         check_yaml(config_path)
