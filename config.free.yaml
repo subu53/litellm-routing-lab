@@ -26,11 +26,21 @@ model_list:
           COMPLEX: gemini-flash
           REASONING: gemini-flash
         classifier_type: heuristic
-        classifier_fallback: default_model
+        # Fall back to the scorer itself, not to one fixed model: a fallback to
+        # default_model would send every undecidable prompt to the strong tier
+        # and hide scorer failures.
+        classifier_fallback: heuristic
         classifier_context_window_size: 3
         classifier_context_budget_chars: 8000
         classifier_context_include_assistant_turns: false
         return_raw_model_name: true
+        # Lowered from the defaults (0.15 / 0.35 / 0.60) because the scorer rated
+        # every benchmark prompt below the MEDIUM boundary, sending all four to the
+        # cheap tier. These boundaries let genuinely harder prompts escalate.
+        tier_boundaries:
+          simple_medium: 0.10
+          medium_complex: 0.25
+          complex_reasoning: 0.45
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
