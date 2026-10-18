@@ -109,13 +109,34 @@ def check_yaml(path):
           f"got {top}")
 
     text = path.read_text(encoding="utf-8")
-    for required in ("model_name: jev-router", "classifier_type: jev",
-                     "return_raw_model_name: true", "master_key:",
-                     "database_url:", "complexity_router_default_model:"):
+    # Both configs share the router contract; they differ in backend and classifier.
+    for required in ("model_name: jev-router", "return_raw_model_name: true",
+                     "master_key:", "complexity_router_default_model:"):
         check(f"{path.name} contains {required!r}", required in text)
 
-    # Every tier must point at a declared alias.
-    aliases = set(re.findall(r'model_name:\s*([A-Za-z0-9_-]+)', text))
+    # Exactly one classifier type, and it must be a recognized one.
+    classifiers = re.findall(r'classifier_type:\s*(\S+)', text)
+    check(f"{path.name} declares exactly one classifier_type",
+          len(classifiers) == 1, f"got {classifiers}")
+    if classifiers:
+        check(f"{path.name} classifier_type is valid",
+              classifiers[0] in {"jev", "heuristic", "llm", "custom"},
+              f"got {classifiers[0]}")
+        # A jev classifier needs its config block and the key the container injects.
+        if classifiers[0] == "jev":
+            for required in ("jev_classifier_config:", "classifier_type: jev"):
+                check(f"{path.name} jev config contains {required!r}", required in text)
+        else:
+            check(f"{path.name} non-jev config has no jev block",
+                  "jev_classifier_config:" not in text,
+                  "stale jev settings would be ignored but mislead readers")
+            check(f"{path.name} non-jev config needs no database_url",
+                  "database_url:" not in text,
+                  "no Cloud SQL in the free path")
+
+    # Every tier must point at a declared alias. The negative lookbehind stops
+    # `return_raw_model_name: true` from being read as an alias declaration.
+    aliases = set(re.findall(r'(?<![A-Za-z0-9_])model_name:\s*([A-Za-z0-9_-]+)', text))
     tiers = dict(re.findall(r'^\s{10}(SIMPLE|MEDIUM|COMPLEX|REASONING):\s*(\S+)$',
                             text, re.M))
     check(f"{path.name} has all four tiers", len(tiers) == 4, f"got {sorted(tiers)}")
@@ -183,7 +204,12 @@ for name in ("main.tf", "outputs.tf", "variables.tf", "versions.tf"):
     hcl_files.append(path)
     declared |= check_hcl(path)
 check_references(declared, hcl_files)
-check_yaml(ROOT / "config.yaml")
+for config_name in ("config.yaml", "config.free.yaml"):
+    config_path = ROOT / config_name
+    if config_path.exists():
+        check_yaml(config_path)
+    else:
+        fail(f"{config_name} is missing")
 check_dockerfile(ROOT / "Dockerfile")
 check_tfvars_example(ROOT / "terraform.tfvars.example")
 check_python(ROOT / "benchmark.py")

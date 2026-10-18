@@ -12,7 +12,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "tools" / "check_structure.py"
 FILES = ["main.tf", "outputs.tf", "variables.tf", "versions.tf",
-         "config.yaml", "Dockerfile", "terraform.tfvars.example", "benchmark.py"]
+         "config.yaml", "config.free.yaml", "Dockerfile",
+         "terraform.tfvars.example", "benchmark.py"]
 
 results = []
 
@@ -83,6 +84,19 @@ case("missing CMD in Dockerfile", "Dockerfile",
      lambda t: "\n".join(l for l in t.splitlines() if not l.startswith("CMD")), "has a CMD")
 case("broken python syntax", "benchmark.py",
      lambda t: t.replace("def main():", "def main(:"), "syntax error")
+case("free config keeps a jev block", "config.free.yaml",
+     lambda t: t.replace("classifier_type: heuristic",
+                         "classifier_type: heuristic\n        jev_classifier_config:\n          model: jev-latest"),
+     "no jev block")
+case("free config needs no database_url", "config.free.yaml",
+     lambda t: t.replace("master_key:", "database_url: os.environ/DATABASE_URL\n  master_key:"),
+     "no database_url")
+case("invalid classifier type", "config.free.yaml",
+     lambda t: t.replace("classifier_type: heuristic", "classifier_type: magic"),
+     "classifier_type is valid")
+case("two classifiers declared", "config.free.yaml",
+     lambda t: t.replace("classifier_fallback:", "classifier_type: jev\n        classifier_fallback:"),
+     "exactly one classifier_type")
 
 failed = [r for r in results if not r[0]]
 for ok, name, code, expect, output in results:

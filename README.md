@@ -63,6 +63,21 @@ exist in no file and no image layer.
 guardrail; exceeding it is expected to return HTTP 422. (Not yet confirmed against a live
 deployment — see the runbook's Secret Mission step.)
 
+## Two ways to run this
+
+| | Paid path | Free path |
+|---|---|---|
+| Guide | [`RUNBOOK.md`](RUNBOOK.md) | [`LOCAL-RUNBOOK.md`](LOCAL-RUNBOOK.md) |
+| Models | Vertex AI Gemini (needs GCP billing) | Groq free tier (no card) |
+| Classifier | Jev via TypeSafe (paid) | built-in heuristic scorer (free) |
+| State | Cloud SQL Postgres | in-process |
+| Deployment | Cloud Run via Terraform | local process on :4000 |
+| Cost | ~$5 | **$0** |
+| Proves | cloud deployment + routing | routing + cost evidence |
+
+Both share `benchmark.py` and the same router semantics, so the measurement method
+transfers. The free path never adds a payment method.
+
 ## Repository layout
 
 | File | Purpose |
@@ -71,11 +86,13 @@ deployment — see the runbook's Secret Mission step.)
 | `variables.tf` | `project_id`, `region`, `vertex_location` |
 | `versions.tf` | Pins Terraform 1.16.5, Google provider 8.5.0, Random 3.9.1 |
 | `outputs.tf` | `service_url`, `admin_url`, `image_uri` |
-| `config.yaml` | The two Gemini aliases and the Jev complexity router |
+| `config.yaml` | Paid path: Gemini aliases + Jev complexity router |
+| `config.free.yaml` | Free path: Groq Llama aliases + heuristic complexity router |
 | `Dockerfile` | Pins LiteLLM 1.104.0 and bakes in `config.yaml` |
 | `benchmark.py` | Four-case baseline vs. routed benchmark, writes CSV evidence |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and set your project ID |
-| `RUNBOOK.md` | Step-by-step deploy in Google Cloud Shell, including cleanup |
+| `RUNBOOK.md` | Paid deploy in Google Cloud Shell, including cleanup |
+| `LOCAL-RUNBOOK.md` | Zero-cost local run in Cloud Shell, no card |
 | `tools/check_structure.py` | Offline structural checks (HCL balance, YAML shape, references) |
 | `tools/test_checker.py` | Negative tests proving the checker catches real faults |
 
@@ -84,13 +101,14 @@ deployment — see the runbook's Secret Mission step.)
 No Terraform, gcloud, or Docker is required to run these:
 
 ```bash
-python tools/check_structure.py   # 178 structural checks
-python tools/test_checker.py      # 11 negative tests: proves the checker bites
+python tools/check_structure.py   # 270 structural checks, both configs
+python tools/test_checker.py      # 15 negative tests: proves the checker bites
 ```
 
 `check_structure.py` verifies balanced HCL delimiters, unterminated strings, project-wide
 resource reference resolution, YAML indentation, that all four router tiers point at
-declared aliases, and that `benchmark.py` still exposes `run_case`/`main`.
+declared aliases, that exactly one valid classifier is configured, that a non-Jev config
+carries no stale Jev settings, and that `benchmark.py` still exposes `run_case`/`main`.
 
 **It is not `terraform validate`** — provider schema errors can still slip through. It
 catches the failure class that matters for hand-assembled config: the typo that costs you
@@ -98,8 +116,9 @@ twenty minutes in Cloud Shell.
 
 ## Deploy
 
-Full step-by-step instructions are in [`RUNBOOK.md`](RUNBOOK.md). Short version,
-run from Google Cloud Shell:
+Full step-by-step instructions are in [`RUNBOOK.md`](RUNBOOK.md) (paid) or
+[`LOCAL-RUNBOOK.md`](LOCAL-RUNBOOK.md) (free). Paid short version, run from Google
+Cloud Shell:
 
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # then set your project_id
@@ -116,6 +135,8 @@ Then open `terraform output -raw admin_url`.
 The same four prompts run twice — once pinned to `gemini-flash`, once through
 `jev-router` — so the comparison isolates routing as the only variable.
 
+Paid path:
+
 ```bash
 export LITELLM_BASE_URL="$(terraform output -raw service_url)"
 export LITELLM_API_KEY="$(gcloud secrets versions access latest --secret=litellm-api-key)"
@@ -123,16 +144,32 @@ python3 benchmark.py baseline   # writes benchmark-baseline.csv
 python3 benchmark.py routed     # writes benchmark-routed.csv
 ```
 
+Free path (`LOCAL-RUNBOOK.md` steps 3-5):
+
+```bash
+export LITELLM_BASE_URL="http://localhost:4000"
+export LITELLM_API_KEY="$LITELLM_MASTER_KEY"
+python3 benchmark.py baseline
+python3 benchmark.py routed
+```
+
 Each row records `case`, `expected_tier`, `requested_model`, `returned_model`,
-`latency_ms`, and `classifier_cost_header`.
+`latency_ms`, and `classifier_cost_header`. On the free path
+`classifier_cost_header` is always empty — the heuristic scorer is local and free,
+which is itself the headline result.
 
 ## Cost
 
-Infrastructure targets **under $5** if destroyed within two hours. Cloud SQL compute and
-storage are the only meaningful standing charges. Note that the `$1` LiteLLM virtual-key
-budget caps gateway traffic only — it does **not** cap Google Cloud billing.
+| Path | Cost | Notes |
+|---|---|---|
+| Free (`config.free.yaml`) | **$0** | Groq free tier, no card, no GCP resources |
+| Paid (`config.yaml`) | **~$5** | under $5 if destroyed within two hours |
 
-To tear down:
+On the paid path, Cloud SQL compute and storage are the only meaningful standing
+charges. Note that the `$1` LiteLLM virtual-key budget caps gateway traffic only — it
+does **not** cap Google Cloud billing.
+
+To tear down the paid path:
 
 ```bash
 terraform destroy

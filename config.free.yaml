@@ -1,0 +1,34 @@
+model_list:
+  # Cheap tier: small fast model, mirrors the role of a Flash-Lite model.
+  - model_name: gemini-flash-lite
+    litellm_params:
+      model: groq/llama-3.1-8b-instant
+      api_key: os.environ/GROQ_API_KEY
+
+  # Strong tier: larger model, mirrors the role of a full Flash model.
+  - model_name: gemini-flash
+    litellm_params:
+      model: groq/llama-3.3-70b-versatile
+      api_key: os.environ/GROQ_API_KEY
+
+  # Complexity router using LiteLLM's built-in heuristic scorer.
+  # No third-party classifier, no API key, no cost, sub-millisecond.
+  - model_name: jev-router
+    litellm_params:
+      model: auto_router/complexity_router
+      complexity_router_default_model: gemini-flash
+      complexity_router_config:
+        tiers:
+          SIMPLE: gemini-flash-lite
+          MEDIUM: gemini-flash-lite
+          COMPLEX: gemini-flash
+          REASONING: gemini-flash
+        classifier_type: heuristic
+        classifier_fallback: default_model
+        classifier_context_window_size: 3
+        classifier_context_budget_chars: 8000
+        classifier_context_include_assistant_turns: false
+        return_raw_model_name: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
