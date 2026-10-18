@@ -87,7 +87,7 @@ transfers. The free path never adds a payment method.
 | `versions.tf` | Pins Terraform 1.16.5, Google provider 8.5.0, Random 3.9.1 |
 | `outputs.tf` | `service_url`, `admin_url`, `image_uri` |
 | `config.yaml` | Paid path: Gemini aliases + Jev complexity router |
-| `config.free.yaml` | Free path: Groq Llama aliases + heuristic complexity router |
+| `config.free.yaml` | Free path: Groq gpt-oss aliases + heuristic complexity router |
 | `Dockerfile` | Pins LiteLLM 1.104.0 and bakes in `config.yaml` |
 | `benchmark.py` | Four-case baseline vs. routed benchmark, writes CSV evidence |
 | `terraform.tfvars.example` | Copy to `terraform.tfvars` and set your project ID |
