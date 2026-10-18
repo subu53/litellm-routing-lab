@@ -179,7 +179,7 @@ def check_python(path):
         fail(f"{path.name} syntax error: {error}")
         return
     funcs = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
-    for required in ("run_case", "main"):
+    for required in ("run_case", "main", "require_env"):
         check(f"{path.name} defines {required}()", required in funcs)
     consts = {t.id for n in ast.walk(tree) if isinstance(n, ast.Assign)
               for t in n.targets if isinstance(t, ast.Name)}

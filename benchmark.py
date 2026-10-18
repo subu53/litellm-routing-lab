@@ -45,11 +45,23 @@ def run_case(base_url, api_key, requested_model, case_name, expected_tier, promp
             "classifier_cost_header": response.headers.get("x-litellm-classifier-cost", ""),
         }
 
+def require_env(name):
+    # Fail with an actionable message instead of a bare KeyError.
+    value = os.environ.get(name)
+    if not value:
+        raise SystemExit(
+            f"{name} is not set.\n"
+            "Set it before running, for example:\n"
+            '  export LITELLM_BASE_URL="http://localhost:4000"\n'
+            '  export LITELLM_API_KEY="$LITELLM_MASTER_KEY"'
+        )
+    return value
+
 def main():
     if len(sys.argv) != 2 or sys.argv[1] not in MODELS:
         raise SystemExit("Usage: python3 benchmark.py baseline|routed")
-    base_url = os.environ["LITELLM_BASE_URL"].rstrip("/")
-    api_key = os.environ["LITELLM_API_KEY"]
+    base_url = require_env("LITELLM_BASE_URL").rstrip("/")
+    api_key = require_env("LITELLM_API_KEY")
     mode = sys.argv[1]
     rows = []
     # Run every case and print its routing result immediately.
