@@ -1,11 +1,13 @@
 model_list:
-  # Free path using Google AI Studio (Gemini API), no billing account required.
-  # Model IDs verified against the published free-tier catalogue:
-  #   gemini-3.1-flash-lite  500 req/day   <- the real lite model
-  #   gemini-3-flash          20 req/day
-  # Note: gemini-3.5-flash exists (GA, $1.50/M input) but is a premium model;
-  # it is not listed on the free tier. Swap it in for the strong tier if your
-  # key has quota for it.
+  # Free path using Google AI Studio (Gemini API). No billing account required.
+  #
+  # Verified against a live key: gemini-3.5-flash responds on the free tier.
+  # The challenge's other model, gemini-3.5-flash-lite, does not exist - the
+  # Flash-Lite line is at 3.1, so that is used for the cheap tier.
+  #
+  # NOTE: per-model free-tier limits apply. Gemini 3 Flash is 20 requests/day,
+  # so run the benchmark twice at most before the quota tightens. Flash-Lite
+  # allows 500/day, and MEDIUM routes there, which is the point of the exercise.
   - model_name: gemini-flash-lite
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
@@ -13,12 +15,12 @@ model_list:
 
   - model_name: gemini-flash
     litellm_params:
-      model: gemini/gemini-3-flash
+      model: gemini/gemini-3.5-flash
       api_key: os.environ/GEMINI_API_KEY
 
   # Complexity router using LiteLLM's built-in heuristic scorer.
-  # Same aliases and tiers as config.yaml and config.free.yaml, so benchmark.py
-  # measures the same thing on every path.
+  # Same aliases and tiers across every config, so benchmark.py measures the
+  # same thing on each path.
   - model_name: jev-router
     litellm_params:
       model: auto_router/complexity_router
