@@ -103,6 +103,12 @@ available during this work. The local path needs only a free Google AI Studio ke
 was the path that could actually be exercised. Every measured result below comes from the
 local path; the GCP path is infrastructure as code that has never been applied.
 
+**The third config, `config.free.yaml`, swaps the model backend for Groq** (`gpt-oss-20b`
+and `gpt-oss-120b`) and keeps the identical aliases, tier map and heuristic classifier. It
+was written before a Gemini key was available, is not what produced any number below, and
+is kept because a reader whose Groq catalogue differs may find it useful. Only the two
+`model:` lines differ from `config.gemini.yaml`; the router block is the same.
+
 **The alias `jev-router` is a legacy label.** In the evaluated config the classifier behind
 it is `classifier_type: heuristic`, not Jev. The alias is kept because the router tiers and
 `benchmark.py` reference it, and renaming would churn three configs without changing

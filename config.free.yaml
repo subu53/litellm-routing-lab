@@ -34,11 +34,16 @@ model_list:
         classifier_context_budget_chars: 8000
         classifier_context_include_assistant_turns: false
         return_raw_model_name: true
-        # Tier boundaries are left at the shipped defaults (0.15 / 0.35 / 0.60).
-        # A previous revision lowered medium_complex to 0.25 and that is measurably
-        # harmful: the scorer rates reasoning prompts near 0.175, which is above a
-        # 0.10 boundary and below a 0.25 boundary, so lowering it pulls mid-range
-        # scores DOWN into the cheap tier. Measure before tuning.
+        # Tier boundaries are left at the shipped defaults (0.15 / 0.35 / 0.60), the
+        # same map as config.gemini.yaml. Note only the boundary between SIMPLE and
+        # MEDIUM changes a routing decision here, because SIMPLE and MEDIUM share the
+        # cheap model and COMPLEX and REASONING share the strong one.
+        #
+        # Tuning was measured and rejected, twice over. Lowering medium_complex to
+        # 0.25 gave identical results to 0.35 on the held-out half. And an offline
+        # sweep of every threshold midpoint showed hard prompts score 0.0 to 0.325
+        # while easy prompts score -0.15 to 0.163, so the two classes overlap and no
+        # single cut separates them. Do not tune these without measuring first.
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
