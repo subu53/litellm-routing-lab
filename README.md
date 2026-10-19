@@ -301,10 +301,26 @@ difficulty.**
 **Conclusion.** LiteLLM's built-in heuristic is a surface-form detector, not a complexity
 classifier, on this workload. Its signals are prompt length, the presence of a "step by step"
 style phrase, and a small technical vocabulary; a hard request written conversationally scores
-0.0, exactly as an empty prompt does. No tier boundary fixes this. The configuration is
-marked INTERIM at the threshold the pooled curve selected, with the caveat that it trades
-under-routing for sending two thirds of traffic to the larger model; it is not presented as a
-validated operating point.
+0.0, exactly as an empty prompt does.
+
+**The interim configuration is a length gate, not complexity routing.** At the selected
+threshold the rule is effectively "anything longer than one line goes to the strong model".
+That is safe in one direction only — a long prompt never reaches the cheap model — while
+short hard prompts reach it every time. Under the shipped defaults the opposite holds:
+nothing reaches Flash at all, so the scorer performs no better than "always cheap".
+
+**This says nothing about a learned classifier.** Every result above concerns the free
+built-in heuristic. Whether a trained classifier separates the four 2x2 cells is untested
+here, and that comparison is the experiment this project exists to run. The harness is
+classifier-agnostic: `tools/test_length_confound.py` and
+`tools/evaluate_router.py --dump-scores` only require a working `POST
+/auto_router/test_routing` endpoint, so pointing them at `config.yaml` (the paid Jev path)
+would produce a cell table to sit beside this one. That path has not been run, and the paid
+endpoint has not been confirmed to expose the same route.
+
+**Savings were not measured.** The Flash-Lite share at this threshold is the short prompts,
+whose input token counts are already small, so the cost benefit is likely thin. Output token
+counts were never recorded, so no money figure is claimed.
 
 ### Why the boundary cannot help
 
@@ -411,11 +427,11 @@ equal-scoring neighbours on both sides.
 **Counts are reported with 95% Wilson intervals.** On 30 held-out prompts one prompt is
 about 3 points, so an interval is more honest than a single percentage.
 
-**Known limits of this evaluation set.** All 60 prompts were written by one author in one
-sitting, so they share a style that real traffic will not. Only the `MEDIUM`/`COMPLEX`
-boundary affects the binary decision, so label noise at that boundary moves the
-under-routed count directly; those labels deserve hand review. The set is large enough to
-rank a handful of configurations, not to certify an accuracy figure.
+**Known limits.** One author wrote every prompt, so they share a style real traffic will
+not. Each 2x2 cell holds 10 prompts, so a 10/10 result carries a 95% Wilson interval of
+72-100% — strong but not precise. All results concern the **free built-in heuristic only**;
+whether a learned classifier separates the cells is untested. Boundary values are an interim
+choice, not a validated operating point. Savings in money are unmeasured.
 
 **The tier map then decides the rest.** `MEDIUM` maps to the cheap tier in this project's
 design, so a mid-tier score of 0.175 is served by Flash-Lite. Remapping `MEDIUM` to the

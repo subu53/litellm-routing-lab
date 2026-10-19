@@ -33,6 +33,26 @@ def auc(rows, key):
     return wins / (len(hard) * len(easy))
 
 
+def verdict_for(a_score, a_words, tolerance=0.05):
+    """Judge which predictor separates the classes better.
+
+    Compares the two AUCs DIRECTLY. An earlier version tested
+    abs(score - words) <= 0.10 and otherwise printed "score clearly out-ranks
+    length", which reported a win for the score at 0.725 against 1.000 - the
+    opposite of the data. Direction matters, so it is stated explicitly here.
+    """
+    gap = abs(a_score - a_words)
+    if gap <= tolerance:
+        return ("score and length rank almost identically - the classifier may be "
+                "acting as a length gate")
+    if a_words > a_score:
+        return ("word count separates the classes better than the score "
+                f"({a_words:.3f} vs {a_score:.3f}) - the classifier adds nothing "
+                "beyond length on this set")
+    return (f"score separates the classes better than word count "
+            f"({a_score:.3f} vs {a_words:.3f})")
+
+
 def summarise(rows, label):
     a_score = auc(rows, "score")
     a_words = auc(rows, "words")
@@ -47,11 +67,7 @@ def summarise(rows, label):
     print(f"  median words (hard/easy): {median(hw)} / {median(ew)}")
     overlap = [w for w in hw if w in set(ew)]
     print(f"  word counts shared by both classes: {len(overlap)}/{len(hard)} hard prompts")
-    verdict = ("score and length rank almost identically - the classifier may be "
-               "acting as a length gate"
-               if abs(a_score - a_words) <= 0.10 else
-               "score clearly out-ranks length")
-    print(f"  -> {verdict}")
+    print(f"  -> {verdict_for(a_score, a_words)}")
     return a_score, a_words
 
 

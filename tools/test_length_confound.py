@@ -90,6 +90,7 @@ def main():
     print(f"interim threshold t={THRESHOLD}: SIMPLE (cheap) below t, strong at or above\n")
 
     counts = {}
+    signals_by_cell = {}
     for name, prompts in cells.items():
         want = WANT[name]
         rows = []
@@ -98,19 +99,34 @@ def main():
             decision = body.get("routing_decision", {})
             score = decision.get("score")
             words = len(text.split())
+            signals = "; ".join(decision.get("signals", [])) or "none"
             # Apply the interim policy ourselves: score >= t -> strong model.
             got = "gemini-flash" if (score is not None and score >= THRESHOLD) \
                 else "gemini-flash-lite"
             rows.append({"score": score, "words": words, "got": got,
-                         "ok": got == want, "text": text})
+                         "ok": got == want, "signals": signals, "text": text})
         good = sum(r["ok"] for r in rows)
         counts[name] = good
+        signals_by_cell[name] = rows
         print(f"{name}: {good}/{len(rows)} routed as difficulty would require")
         for r in rows:
             mark = "ok  " if r["ok"] else "MISS"
             print(f"   {mark} score={r['score']!s:>8} words={r['words']:>3} "
-                  f"-> {r['got'].replace('gemini-', '')}")
+                  f"-> {r['got'].replace('gemini-', ''):<10} [{r['signals']}]")
         print()
+
+    # Which markers fired in each cell. Shows what the heuristic reacts to besides
+    # length and a "step by step" phrase.
+    print("signals by cell")
+    print("---------------")
+    for name, rows in signals_by_cell.items():
+        tally = {}
+        for r in rows:
+            for sig in r["signals"].split("; "):
+                tally[sig] = tally.get(sig, 0) + 1
+        ordered = sorted(tally.items(), key=lambda kv: (-kv[1], kv[0]))
+        print(f"  {name:12} " + ", ".join(f"{k} x{v}" for k, v in ordered))
+    print()
 
     short_hard_wrong = len(cells["short_hard"]) - counts["short_hard"]
     long_easy_wrong = len(cells["long_easy"]) - counts["long_easy"]
