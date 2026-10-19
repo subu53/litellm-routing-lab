@@ -186,10 +186,15 @@ def score(results):
     under_routed: a hard prompt sent to the cheap model -> quality risk
     over_routed:  an easy prompt sent to the strong model -> wasted spend
     """
-    ok = under = over = 0
+    ok = under = over = unknown = 0
     for r in results:
         want = TIERS[r["tier_expected"]]
         got = r["model_got"]
+        # A missing or unrecognised model is not a routing decision. Counting it as
+        # under- or over-routing would turn a proxy failure into a result.
+        if got not in (STRONG, "gemini-flash-lite"):
+            unknown += 1
+            continue
         if got == want:
             ok += 1
         elif want == STRONG:
@@ -197,6 +202,10 @@ def score(results):
         else:
             over += 1
     n = len(results)
+    if unknown:
+        raise SystemExit(
+            f"{unknown} of {n} results have no usable routed model; refusing to score. "
+            "Is the proxy running and returning routed_model?")
     return {"accuracy": f"{ok}/{n}", "correct": ok, "n": n,
             "under_routed": under, "over_routed": over}
 

@@ -40,6 +40,8 @@ def candidates(rows):
     >= or > at the boundary cannot change which prompts move.
     """
     scores = sorted({r["score"] for r in rows})
+    if not scores:
+        raise SystemExit("no rows to sweep: check the CSV path and the --split value")
     points = [round(scores[0] - 0.01, 4)]
     points += [round((a + b) / 2, 4) for a, b in zip(scores, scores[1:])]
     points.append(round(scores[-1] + 0.01, 4))

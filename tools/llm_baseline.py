@@ -66,13 +66,19 @@ def classify(api_key, model, text):
         body = json.loads(response.read().decode("utf-8"))
     elapsed = round((time.perf_counter() - started) * 1000, 1)
 
-    parts = (body.get("candidates", [{}])[0].get("content", {}).get("parts", []))
+    # A blocked or safety-filtered response has no candidates at all, and an empty
+    # list would raise IndexError; a null body would raise TypeError. Record it as
+    # "unparsed" instead of crashing, and let the caller refuse to judge on it.
+    candidates = body.get("candidates") or [{}]
+    first = candidates[0] or {}
+    parts = (first.get("content") or {}).get("parts") or []
     raw = "".join(p.get("text", "") for p in parts).strip().lower()
+    blocked = bool((body.get("promptFeedback") or {}).get("blockReason"))
     usage = body.get("usageMetadata", {})
     return {
         "answer_raw": raw[:20],
-        "verdict": "hard" if raw.startswith("hard") else (
-            "easy" if raw.startswith("easy") else "unparsed"),
+        "verdict": "unparsed" if not raw or blocked else (
+            "hard" if raw.startswith("hard") else "easy"),
         "latency_ms": elapsed,
         "prompt_tokens": usage.get("promptTokenCount", 0),
         "output_tokens": usage.get("candidatesTokenCount", 0),
@@ -127,6 +133,7 @@ def main():
               f"{latencies[len(latencies) // 2]:>10}")
 
     total_ok = sum(1 for r in rows if r["verdict"] == r["expected"])
+    parsed = [r for r in rows if r["verdict"] != "unparsed"]
     lo, hi = wilson(total_ok, len(rows))
     print(f"\noverall: {total_ok}/{len(rows)} "
           f"(95% CI {lo * 100:.0f}%-{hi * 100:.0f}%)")
@@ -134,20 +141,39 @@ def main():
     tok_out = sum(r["output_tokens"] for r in rows)
     print(f"tokens: {tok_in} in, {tok_out} out for {len(rows)} classifications")
 
-    # The pre-registered criteria applied to this classifier, for a like-for-like line.
-    short_hard_wrong = sum(1 for r in rows if r["cell"] == "short_hard"
+    # An unparsed answer is not evidence about the classifier. Counting it as
+    # wrong would turn a total parse failure into a substantive result.
+    total_parsed = len(parsed)
+    if total_parsed < len(rows) * 0.9:
+        print(f"\nREFUSING A VERDICT: only {total_parsed}/{len(rows)} answers parsed. "
+              "A parse rate this low says nothing about classification ability.")
+        print("Wrote llm_baseline.csv for inspection.")
+        return
+
+    # The pre-registered criteria applied to this classifier, for a like-for-like
+    # comparison. Unparsed rows are excluded so they cannot be scored as misses.
+    short_hard_wrong = sum(1 for r in parsed if r["cell"] == "short_hard"
                            and r["verdict"] != "hard")
-    long_easy_wrong = sum(1 for r in rows if r["cell"] == "long_easy"
+    long_easy_wrong = sum(1 for r in parsed if r["cell"] == "long_easy"
                           and r["verdict"] != "easy")
-    print(f"\nsame pre-registered reading as the heuristic:")
+    print(f"\nsame pre-registered reading as the heuristic "
+          f"({total_parsed} parsed answers):")
     print(f"  short+hard under-routed : {short_hard_wrong}/10")
     print(f"  long+easy over-routed   : {long_easy_wrong}/10")
+    short_ok = sum(1 for r in parsed if r["cell"] == "short_hard")
+    long_ok = sum(1 for r in parsed if r["cell"] == "long_easy")
     if short_hard_wrong >= 7 and long_easy_wrong >= 7:
         print("  -> this mode also fails the cells; length is not the only thing it sees,"
               " but it is not classifying difficulty either")
-    else:
+    elif short_hard_wrong <= 4 and long_easy_wrong <= 4:
         print("  -> this classifier does not reproduce the heuristic's cell pattern."
               " It is a candidate for the learned-classifier comparison.")
+    else:
+        print("  -> mixed result, in the 5-6 band the pre-registered rubric calls"
+              " SUPPORTED-WEAK. Report it as mixed rather than as a win or a loss.")
+    if short_ok < 10 or long_ok < 10:
+        print(f"  note: cell denominators reduced (short_hard {short_ok}, "
+              f"long_easy {long_ok}) because of unparsed answers.")
     print("\nWrote llm_baseline.csv. Run eval/archive_results.sh to file it.")
 
 

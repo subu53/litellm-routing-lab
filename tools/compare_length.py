@@ -41,6 +41,12 @@ def verdict_for(a_score, a_words, tolerance=0.05):
     length", which reported a win for the score at 0.725 against 1.000 - the
     opposite of the data. Direction matters, so it is stated explicitly here.
     """
+    # NaN appears when one class is empty. Every comparison below is False for
+    # NaN, so without this guard it falls through to the score-wins branch and
+    # prints "score separates the classes better (nan vs nan)".
+    if a_score != a_score or a_words != a_words:
+        return ("not comparable - one class is empty, so AUC is undefined "
+                f"(score={a_score}, words={a_words})")
     gap = abs(a_score - a_words)
     if gap <= tolerance:
         # Print the values even on a tie: "almost identically" is meaningless

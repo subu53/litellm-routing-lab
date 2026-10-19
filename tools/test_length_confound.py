@@ -98,11 +98,17 @@ def main():
             body = classify(base_url, api_key, text)
             decision = body.get("routing_decision", {})
             score = decision.get("score")
+            # A missing or non-numeric score MUST stop the run. It previously fell
+            # through to the cheap model, so a dead proxy still produced a clean
+            # looking cell table and a substantive verdict.
+            if not isinstance(score, (int, float)):
+                raise SystemExit(
+                    f"no numeric score for {text[:50]!r} (got {score!r}). "
+                    "Is the proxy running and returning routing_decision.score?")
             words = len(text.split())
             signals = "; ".join(decision.get("signals", [])) or "none"
             # Apply the interim policy ourselves: score >= t -> strong model.
-            got = "gemini-flash" if (score is not None and score >= THRESHOLD) \
-                else "gemini-flash-lite"
+            got = "gemini-flash" if score >= THRESHOLD else "gemini-flash-lite"
             rows.append({"score": score, "words": words, "got": got,
                          "ok": got == want, "signals": signals, "text": text})
         good = sum(r["ok"] for r in rows)

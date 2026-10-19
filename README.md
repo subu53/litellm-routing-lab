@@ -41,7 +41,7 @@ project builds that gateway, then tests whether the classification can be truste
 
 ## Architecture
 
-Two configurations ship and they are separate deployments. The one that was **evaluated** is
+Three config files ship; two represent separate deployments. The one that was **evaluated** is
 the local free path. The one that is **written but unapplied** is the GCP path.
 
 ```
@@ -115,10 +115,11 @@ every threshold midpoint was then evaluated offline, a length baseline was compu
 direct competitor to the classifier, and a 2x2 test was designed to break the finding with
 pre-registered criteria. The classifier did not survive it. That is the result.
 
-**The harness is classifier-agnostic.** `test_length_confound.py` and
-`evaluate_router.py --dump-scores` only need a working `POST /auto_router/test_routing`
-endpoint, so the same four-cell table could be produced for a paid classifier and compared
-against this one. That comparison has not been run.
+**The harness is single-classifier as shipped.** Both measuring tools hardcode
+`classifier_type: heuristic` in the request body, and `test_length_confound.py` also hardcodes
+the threshold, so they measure the built-in heuristic whatever `config.yaml` says. Producing
+the same four-cell table for a paid classifier would require removing that override and
+sending matching boundaries. That has not been done and is untested.
 
 **Classifier failure degrades safely** *(configured, untested)*. `classifier_fallback:
 default_model` sends an undecidable request to the strong model, which fails toward quality
@@ -299,18 +300,17 @@ middle-of-plateau rule, **0.25** was chosen and confirmed once on the 30 held-ou
 
 **The tuning gain did not transfer.** On held-out the two configurations are identical.
 
-**Under the shipped defaults the router sent zero prompts to Flash.** All 60 scores are at
-or below 0.175 while `medium_complex` is 0.35, so on this evaluation set the shipped router
-behaved as **always Flash-Lite**. There was no routing decision being made; "0/30
-over-routed" is arithmetic, not a quality result, because every boundary tested (0.20 and
-above) sat above every observed score.
+**Under the shipped defaults the router sent zero prompts to Flash.** The measured maximum
+score in the set is 0.325, below the `medium_complex` boundary of 0.35, so on this evaluation
+set the shipped router behaved as **always Flash-Lite**. There was no routing decision being
+made, and "0/30 over-routed" is arithmetic rather than a quality result.
 
-**The grid itself had a gap.** Boundaries below 0.20 were not tested, so nothing tested a
-threshold under 0.175 — which is exactly where the misroutes live. `simple_medium` and
-`medium_complex` both map to the cheap model, so moving them together changes no model
-choice; the earlier sweep wrongly treated the label-ordering constraint as a floor on the
-usable threshold. `tools/sweep_thresholds.py` fixes this by scoring each prompt once and
-evaluating every midpoint between observed scores offline.
+**The grid itself had a gap.** The first sweep tested `medium_complex` only from 0.20 upward,
+so the clusters where nearly every misroute sits (0.0 and 0.175) were below its range.
+`simple_medium` and `medium_complex` both map to the cheap model, so moving them together
+changes no model choice; the earlier sweep wrongly treated the label-ordering constraint as a
+floor on the usable routing threshold. `tools/sweep_thresholds.py` fixes this by scoring each
+prompt once and evaluating every midpoint between observed scores offline.
 
 ### Offline threshold sweep: no threshold separates the two classes
 
@@ -337,11 +337,12 @@ which sends 23 of 30 held-out prompts to Flash — that is near-default-strong p
 extra steps, not routing. Every threshold that keeps the strong model rare leaves the plain
 language hard prompts on the cheap model.
 
-**Why: the two classes are not separated.** Hard prompts score from -0.150 to 0.210; easy
-prompts score from -0.150 to 0.100. The ranges overlap almost completely, so a single cut on
-this score cannot distinguish them. The score also takes only about eight discrete values
-across 60 prompts, which indicates a few surface-form detectors firing rather than a graded
-measurement of difficulty.
+**Why: the two classes are not separated.** Over all 60 prompts, hard scores range from
+-0.150 to 0.325 and easy scores from -0.150 to at least 0.163 — one easy prompt clears 0.163,
+since the held-out table shows 1/14 over-routed at that threshold. The ranges overlap almost
+completely, so a single cut on this score cannot separate them. The score also takes only
+about eight discrete values across 60 prompts, which indicates a few surface-form detectors
+firing rather than a graded measurement of difficulty.
 
 **The 60-prompt set confounds hardness with length.** Its hard prompts are
 multi-sentence scenarios and its easy prompts are one-liners, so a length gate would score
@@ -379,18 +380,19 @@ the other two are consistent with it, not corroboration of it. What is shown is 
 free heuristic behaved as a length gate on this prompt set** — not that it is a length gate
 in general.
 
-**The short cells are the decisive evidence**, because they hold length fixed at 5-7 words
-while difficulty varies. All ten short-hard prompts scored **-0.1**, and the ten short-easy
-prompts scored -0.1 or -0.15. The scorer rates "Why do distributed locks fail under clock
-skew?" as identically easy to "Spell Kubernetes." With length controlled, it does not detect
-difficulty at all.
+**The short cells are the decisive evidence**, because they keep length far below the long
+cells — 2-11 words with medians 7 and 5, against 42-63 words — while difficulty varies. All
+ten short-hard prompts scored **-0.1**. Eight of the ten short-easy prompts scored -0.1 or
+-0.15 and two scored 0.05. With length held far below the hard-prompts' range, the scorer
+still puts a terse hard question ("Why do distributed locks fail under clock skew?", -0.1)
+**below** an easy one ("Spell Kubernetes", 0.05). It is not detecting difficulty.
 
 The two over-routed short-easy prompts show the same mechanism from the other side:
 "What is a race condition?" and "Spell Kubernetes" both scored **0.05** and reached the strong
 model, because both contain technical vocabulary. The keyword dimension fires on the wrong
 signal.
 
-At the interim threshold anything longer than roughly one line crosses to the strong model,
+At the interim threshold anything longer than roughly one line crossed to the strong model,
 which is why the 60-prompt set reported 0/31 under-routed. **That number measured length, not
 difficulty.**
 
@@ -416,7 +418,7 @@ python3 tools/llm_baseline.py --model gemini-3-flash
 **Conclusion.** LiteLLM's built-in heuristic is a surface-form detector, not a complexity
 classifier, on this workload. Its signals are prompt length, the presence of a "step by step"
 style phrase, and a small technical vocabulary; a hard request written conversationally scores
-0.0, exactly as an empty prompt does.
+0.0, the bottom of its scoring range.
 
 **The interim configuration is a length gate, not complexity routing.** At the selected
 threshold the rule is effectively "anything longer than one line goes to the strong model".
@@ -426,12 +428,13 @@ nothing reaches Flash at all, so the scorer performs no better than "always chea
 
 **This says nothing about a learned classifier.** Every result above concerns the free
 built-in heuristic. Whether a trained classifier separates the four 2x2 cells is untested
-here, and that comparison is the experiment this project exists to run. The harness is
-classifier-agnostic: `tools/test_length_confound.py` and
-`tools/evaluate_router.py --dump-scores` only require a working `POST
-/auto_router/test_routing` endpoint, so pointing them at `config.yaml` (the paid Jev path)
-would produce a cell table to sit beside this one. That path has not been run, and the paid
-endpoint has not been confirmed to expose the same route.
+here, and that comparison is the experiment this project exists to run. **The harness is not
+classifier-agnostic as shipped:** both tools hardcode `classifier_type: heuristic` in the
+request body, and `test_length_confound.py` hardcodes the threshold, so they measure the
+built-in heuristic regardless of `config.yaml`. Pointing them at the paid Jev path would
+require removing that override and sending matching boundaries; that has not been attempted,
+and the paid endpoint has not been confirmed to expose the same `POST /auto_router/test_routing`
+route.
 
 **Savings were not measured.** The Flash-Lite share at this threshold is the short prompts,
 whose input token counts are already small, so the cost benefit is likely thin. Output token
@@ -472,7 +475,7 @@ why that matters — the baseline spread between easy and hard prompts on the sa
 be buying a lower quality answer.
 
 **What this shows.** Without routing, the same model served a one-word prompt and a
-reasoning prompt whose measured latency differed by **10Ã—** (1,525 ms vs 15,392 ms).
+reasoning prompt whose measured latency differed by **10×** (1,525 ms vs 15,392 ms).
 That spread is the waste this project targets, and it is measured rather than assumed.
 
 **What this does not show.** The heuristic scorer sent **all four prompts to the cheap
@@ -493,8 +496,8 @@ measured: the shipped defaults, and defaults plus domain vocabulary appended via
 | tradeoff | 0.175 | **0.425** | reasoning + technical (latency, ordering, failure isolation) | flash-lite | **gemini-3.5-flash** |
 
 Model-choice accuracy on these four prompts went **2/4 → 3/4** with the keywords. **That
-number is retracted.** Retested against the 60-prompt set with a leakage guard, every one of
-those keywords had support in exactly one prompt and none survived
+number is retracted.** Retested against the 60-prompt set with a leakage guard, ten of
+those twelve keywords had support in exactly one tuning prompt and two had none, so none survived
 (`tools/check_keywords.py`), so the gain did not generalise — it was fitted to the prompts
 it was measured on. The table is kept as the record of a hypothesis that failed a proper
 test, not as a result. The evaluated numbers are in the 60-prompt section below.
@@ -519,8 +522,13 @@ uses model choice.
 ### Evaluation protocol and its limits
 
 `eval/prompts.yaml` holds 60 labelled prompts, split 30 tuning / 30 held out. Only the
-tuning half may be used to choose keywords and boundaries; the held-out half is reported
-once and never adjusted against.
+tuning half may be used to choose keywords and boundaries; the held-out half was read once.
+
+**The held-out half has been spent.** An interim operating point of `simple_medium = -0.075`
+was briefly set on the *pooled* 60 scores, which includes the held-out half, and then
+reverted. So even that short-lived setting was fitted rather than validated, and any further
+tuning needs a fresh prompt set. The shipped configuration is back at the documented
+defaults, which is the configuration the tables below describe.
 
 **Only one boundary can change a routing decision.** `SIMPLE` and `MEDIUM` map to the same
 model, as do `COMPLEX` and `REASONING`, so `simple_medium` and `complex_reasoning` move the
@@ -528,9 +536,9 @@ tier *label* without changing the chosen model. The sweep holds both fixed at 0.
 and varies only `medium_complex`. Do not read the fixed values as tuned.
 
 **Keyword guard.** A candidate keyword is accepted only if it appears in at least 3 tuning
-prompts and in no held-out prompt (`tools/check_keywords.py`). Every one of the 12
-candidates tried earlier had support in exactly **one** tuning prompt, because the list was
-derived from the benchmark prompts themselves. All 12 fail the guard, so
+prompts and in no held-out prompt (`tools/check_keywords.py`). Of the 12 candidates tried
+earlier, **ten had support in exactly one tuning prompt and two had none**, because the list
+was derived from the benchmark prompts themselves. All 12 fail the guard, so
 `config.gemini.yaml` configures none of them. The previously reported 3/4 that depended on
 those keywords was training on the test set and is not a result.
 
@@ -556,7 +564,12 @@ length gate on this prompt set**, not that it is a length gate in general.
 
 ### Evidence archive
 
-The numbers above come from script output, so the output is committed next to the claim.
+**No evidence archive is committed in this revision.** The numbers above were produced by
+the scripts in `tools/` against the config in this repository, but the raw output
+(`scores.csv`, the sweep tables, the 2x2 console output) was not saved. `eval/archive_results.sh`
+exists so that a run can be archived in one command, and a reader can regenerate every number
+here — but until it is run and committed, the tables below are not independently re-checkable
+from this checkout. That is a real gap, not a formality.
 `eval/archive_results.sh` writes one timestamped directory containing:
 
 | File | Shows |
@@ -584,7 +597,7 @@ router scored at 0.175, because the shipped keyword lists and dimension scoring 
 published. It has been replaced by `tools/test_routing.py`, which queries the real
 classifier.
 
-**Two measurement caveats.** The `simple` routed case at 7,573 ms is 5Ã— its baseline and
+**Two measurement caveats.** The `simple` routed case at 7,573 ms is 5× its baseline and
 consistent with provider cold start rather than routing overhead, so case 1 of a run is
 unreliable. Rows are single samples, not averages.
 
@@ -633,7 +646,7 @@ gcloud secrets delete typesafe-api-key   # created outside Terraform
   configs. Only the `model:` lines under `litellm_params` differ:
   - `config.yaml` (paid, Vertex AI): `vertex_ai/gemini-*`
   - `config.free.yaml` (free, Groq): `groq/openai/gpt-oss-20b` / `groq/openai/gpt-oss-120b`
-  - `config.gemini.yaml` (free, Gemini API): `gemini/gemini-3.1-flash-lite` / `gemini/gemini-3-flash`
+  - `config.gemini.yaml` (free, Gemini API): `gemini/gemini-3.1-flash-lite` / `gemini/gemini-3.5-flash`
 - **What is and is not verified.** The local free path was run end to end: the proxy started,
   requests were answered by Gemini, and roughly 4,000 classification calls were made across
   the evaluation. The GCP path was not: `main.tf` has **never** passed `terraform validate`,

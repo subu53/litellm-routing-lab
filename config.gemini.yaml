@@ -1,23 +1,29 @@
 model_list:
   # Free path using Google AI Studio (Gemini API). No billing account required.
   #
-  # Verified against a live key: gemini-3.5-flash responds on the free tier.
-  # The challenge's other model, gemini-3.5-flash-lite, does not exist - the
+  # Verified against a live key: gemini-3.5-flash responds on the free tier. The
+  # source project's other model, gemini-3.5-flash-lite, does not exist - the
   # Flash-Lite line is at 3.1, so that is used for the cheap tier.
   #
-  # Tier boundaries are left at the shipped defaults (0.15 / 0.35 / 0.60).
+  # TIER MAP AND BOUNDARIES ARE DELIBERATELY THE SHIPPED DEFAULTS.
   #
-  # Measured with POST /auto_router/test_routing: this benchmark scores
+  # Every measured result in the README was taken with this map
+  # (SIMPLE and MEDIUM -> cheap, COMPLEX and REASONING -> strong) and these
+  # boundaries (0.15 / 0.35 / 0.60). tools/evaluate_router.py and
+  # tools/test_routing.py hardcode the same map, so changing either side
+  # silently makes the other wrong. Keep them in step.
+  #
+  # An interim operating point of simple_medium=-0.075 with MEDIUM routed to the
+  # strong model was tried and reverted. It was chosen on the pooled scores, which
+  # means it was fitted rather than validated, and it sends 40 of 60 prompts to
+  # the strong model - close to default-strong pricing, which is not routing. The
+  # offline threshold sweep showed no threshold separates hard from easy prompts
+  # at all, so there is no operating point worth adopting here.
+  #
+  # Measured with POST /auto_router/test_routing, this benchmark scores
   #   simple -0.1   short_explanation -0.1   architecture 0.0   tradeoff 0.175
-  # so only tradeoff clears simple_medium (0.15) and lands in MEDIUM. Default and
-  # lowered boundaries both produced identical 1/4 tier accuracy, so boundary
-  # tuning is not the lever here. MEDIUM maps to the cheap tier by design, which
-  # is why tradeoff is served by Flash-Lite.
-  #
-  # Lowering simple_medium below 0.0 would push "architecture" out of SIMPLE, but
-  # that would be fitted to four prompts and would treat the scorer's noise floor
-  # as signal. Remapping MEDIUM to the strong model is likewise rejected: it sends
-  # every MEDIUM request to the expensive tier and defeats the cost objective.
+  # so the router sends all four to the cheap model. Under these defaults the
+  # gateway behaves as "always cheap" on this workload.
   - model_name: gemini-flash-lite
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
@@ -29,31 +35,17 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
 
   # Complexity router using LiteLLM's built-in heuristic scorer.
-  # Same aliases and tiers across every config, so benchmark.py measures the
-  # same thing on each path.
+  # Same aliases and tiers across every config, so benchmark.py measures the same
+  # thing on each path. The alias name jev-router is a legacy label: the
+  # classifier behind it here is `heuristic`, not Jev.
   - model_name: jev-router
     litellm_params:
       model: auto_router/complexity_router
       complexity_router_default_model: gemini-flash
       complexity_router_config:
-        # Interim operating point at threshold t = -0.075.
-        #
-        # Only t changes a routing decision: SIMPLE and MEDIUM both map to the
-        # cheap model, and COMPLEX and REASONING both map to the strong one. The
-        # mapping below therefore keeps boundaries ordered while making SIMPLE
-        # mean "scored below t", which the offline curve selected by fewest
-        # under-routed prompts.
-        #
-        # This is an INTERIM choice, not a validated one. On the 60-prompt set it
-        # sends 40/60 prompts to Flash, i.e. close to default-strong pricing, and
-        # the length-confound test (eval/prompts_2x2.yaml) has not been run yet.
-        tier_boundaries:
-          simple_medium: -0.075
-          medium_complex: 0.35
-          complex_reasoning: 0.60
         tiers:
           SIMPLE: gemini-flash-lite
-          MEDIUM: gemini-flash
+          MEDIUM: gemini-flash-lite
           COMPLEX: gemini-flash
           REASONING: gemini-flash
         classifier_type: heuristic
@@ -62,16 +54,11 @@ model_list:
         classifier_context_budget_chars: 8000
         classifier_context_include_assistant_turns: false
         return_raw_model_name: true
-        # No custom_technical_keywords here, deliberately.
-        #
-        # A candidate list (event-driven, idempotency, observability, pipeline,
-        # retries, ordering, failure isolation, synchronous, latency, tradeoff) was
-        # tried and every term had support in exactly ONE tuning prompt, because
-        # the list was derived from the benchmark prompts themselves. That is
-        # training on the test set. tools/check_keywords.py enforces a guard of
-        # support >= 3 tuning prompts and no held-out presence; all 12 candidates
-        # fail it, so none are configured. Re-derive any keyword list from a
-        # larger corpus before adding entries here.
+        # No custom_technical_keywords, deliberately. A candidate list derived
+        # from the benchmark prompts had support in one prompt each and appears
+        # nowhere else, so it would not generalise. tools/check_keywords.py
+        # enforces the guard; ten of the twelve candidates had support in exactly
+        # one tuning prompt and two had none.
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
