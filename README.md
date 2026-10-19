@@ -13,7 +13,7 @@ with the controlled test that produced it, is the substance of this repository.
 | Component | State |
 |---|---|
 | Gateway running locally against free-tier Gemini | **Built and run** |
-| Router evaluation, 100 labelled prompts, held-out split | **Run; results below** |
+| Router evaluation, 60 labelled prompts with a held-out split, plus a 40-prompt 2x2 confound test | **Run; results below** |
 | Benchmark harness, retry logic, offline checks | **Run** |
 | GCP deployment (`main.tf`: Cloud Run, Cloud SQL, Vertex AI) | **Written, never applied** |
 | Paid Jev classifier path | **Configured, never run — no TypeSafe key** |
