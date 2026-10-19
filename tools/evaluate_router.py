@@ -50,6 +50,43 @@ DOMAIN_KEYWORDS = [
     "trade-off", "tradeoff",
 ]
 
+MIN_KEYWORD_SUPPORT = 3
+
+
+def keyword_ok(kw, tuning_prompts, heldout_prompts, min_support=MIN_KEYWORD_SUPPORT):
+    """A keyword is usable only with support in tuning and no held-out presence."""
+    kw = kw.lower()
+    support = sum(kw in p["text"].lower() for p in tuning_prompts)
+    leaked = any(kw in p["text"].lower() for p in heldout_prompts)
+    return support >= min_support and not leaked
+
+
+def surviving_keywords(tuning_prompts, heldout_prompts):
+    return [kw for kw in DOMAIN_KEYWORDS
+            if keyword_ok(kw, tuning_prompts, heldout_prompts)]
+
+
+# ------------------------------------------------------------------ statistics
+def wilson_interval(k, n, z=1.96):
+    """95% Wilson score interval for a proportion, without external dependencies.
+
+    Wilson rather than normal approximation because counts here are small and can
+    be zero, where the normal interval collapses to a point.
+    """
+    if n == 0:
+        return (0.0, 0.0)
+    p = k / n
+    denominator = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denominator
+    margin = (z * ((p * (1 - p) / n + z * z / (4 * n * n)) ** 0.5)) / denominator
+    return (max(0.0, centre - margin), min(1.0, centre + margin))
+
+
+def format_interval(k, n):
+    low, high = wilson_interval(k, n)
+    return f"{k}/{n} (95% CI {low * 100:.0f}%-{high * 100:.0f}%)"
+
+
 
 # ------------------------------------------------------------------ prompts
 def load_prompts(path=PROMPTS_PATH):
@@ -200,54 +237,99 @@ def evaluate(base_url, api_key, extra, boundaries, detail=False):
     return t, h
 
 
+def preflight(base_url, api_key):
+    """Refuse to run against a dead proxy.
+
+    A sweep of 360 calls that all fail would previously still print a result
+    table, because every prompt scored as a routing outcome rather than an error.
+    """
+    body = classify(base_url, api_key, "Reply with only the word ok.",
+                    DEFAULT_BOUNDARIES)
+    if "routing_decision" not in body:
+        raise SystemExit(f"proxy responded without a routing_decision: {body}")
+    print(f"preflight OK: {base_url} is classifying requests")
+
+
 def sweep(base_url, api_key):
     """Sweep medium_complex on the tuning half, confirm the pick on held-out.
 
-    Selection rule: minimise under-routed first (quality), then over-routed
-    (spend). That ordering is a stated policy, not a measurement.
+    Only medium_complex is varied. SIMPLE and MEDIUM both map to the cheap model
+    and COMPLEX and REASONING both map to the strong one, so the other two
+    boundaries move the tier LABEL without ever changing the chosen model.
+    Holding them fixed keeps them from looking tuned.
+
+    Selection rule: fewest under-routed (quality) then fewest over-routed (spend),
+    and among ties take the middle of the plateau rather than the first hit, so
+    the chosen boundary has equal-scoring neighbours on both sides.
     """
     prompts = load_prompts()
+    tuning, heldout = prompts["tuning"], prompts["held_out"]
+
+    keywords = surviving_keywords(tuning, heldout)
+    print(f"\nKeyword guard (support >= {MIN_KEYWORD_SUPPORT} in tuning, "
+          f"absent from held-out):")
+    print(f"  {len(keywords)} of {len(DOMAIN_KEYWORDS)} candidates survive: {keywords}")
+    if not keywords:
+        print("  no keyword survives, so the keyword arm of the sweep is skipped")
+
     print(f"\nSweeping medium_complex over the TUNING half "
-          f"({len(prompts['tuning'])} prompts), "
-          f"{len(prompts['held_out'])} held out.")
-    print("Selection: fewest under-routed, then fewest over-routed.\n")
-    print(f"  {'medium_complex':15} {'kw':4} {'tuning acc':11} "
-          f"{'under':>6} {'over':>5}")
+          f"({len(tuning)} prompts); {len(heldout)} prompts stay held out.")
+    print("Fixed: simple_medium=0.15, complex_reasoning=0.60 "
+          "(they cannot change the chosen model).")
+    print("Selection: fewest under-routed, then fewest over-routed, "
+          "middle of any tied plateau.\n")
+    print(f"  {'medium_complex':15} {'kw':4} {'acc':7} {'under':>6} {'over':>5}")
 
     rows = []
-    for with_keywords in (False, True):
-        extra = {"custom_technical_keywords": DOMAIN_KEYWORDS} if with_keywords else None
+    arms = [("no", None)]
+    if keywords:
+        arms.append(("yes", {"custom_technical_keywords": keywords}))
+    for label, extra in arms:
         for step in range(2, 8):          # 0.10 .. 0.35 in 0.05 steps
             boundary = round(0.10 + 0.05 * step, 2)
             bounds = dict(DEFAULT_BOUNDARIES)
             bounds["medium_complex"] = boundary
-            results = run_set(base_url, api_key, prompts["tuning"], bounds, extra)
+            results = run_set(base_url, api_key, tuning, bounds, extra)
             s = score(results)
-            rows.append({"medium_complex": boundary, "keywords": with_keywords,
-                         "s": s, "bounds": bounds, "extra": extra})
-            print(f"  {boundary:<15} {'yes' if with_keywords else 'no':4} "
-                  f"{s['accuracy']:11} {s['under_routed']:>6} {s['over_routed']:>5}")
+            rows.append({"medium_complex": boundary, "kw": label, "s": s,
+                         "bounds": bounds, "extra": extra})
+            print(f"  {boundary:<15} {label:4} {s['accuracy']:7} "
+                  f"{s['under_routed']:>6} {s['over_routed']:>5}")
 
     rows.sort(key=lambda r: (r["s"]["under_routed"], r["s"]["over_routed"]))
-    best = rows[0]
-    print(f"\nBest on tuning: medium_complex={best['medium_complex']} "
-          f"keywords={'yes' if best['keywords'] else 'no'} "
-          f"(under={best['s']['under_routed']}, over={best['s']['over_routed']})")
+    best_key = (rows[0]["s"]["under_routed"], rows[0]["s"]["over_routed"])
+    plateau = [r for r in rows
+               if (r["s"]["under_routed"], r["s"]["over_routed"]) == best_key]
+    plateau.sort(key=lambda r: r["medium_complex"])
+    chosen = plateau[len(plateau) // 2]      # middle of the plateau
+    print(f"\nBest score on tuning: under={best_key[0]}, over={best_key[1]}")
+    print(f"  tied configs ({len(plateau)}): "
+          f"{[(r['medium_complex'], r['kw']) for r in plateau]}")
+    print(f"  chosen (middle of plateau): medium_complex={chosen['medium_complex']}, "
+          f"keywords={chosen['kw']}")
 
-    print("\nConfirming that single pick on the HELD-OUT half:")
-    held = run_set(base_url, api_key, prompts["held_out"], best["bounds"],
-                   best["extra"])
+    print("\nHELD-OUT confirmation (single use, no further adjustment):")
+    held = run_set(base_url, api_key, heldout, chosen["bounds"], chosen["extra"])
     h = score(held)
-    print(f"  held-out: {h['accuracy']} correct  "
-          f"under-routed={h['under_routed']}  over-routed={h['over_routed']}")
+    print(f"  under-routed: {format_interval(h['under_routed'], h['n'])}   "
+          f"over-routed: {format_interval(h['over_routed'], h['n'])}   "
+          f"correct: {h['accuracy']}")
 
-    print("\nFor comparison, the shipped defaults on held-out:")
-    base_held = score(run_set(base_url, api_key, prompts["held_out"],
-                              DEFAULT_BOUNDARIES))
-    print(f"  held-out: {base_held['accuracy']} correct  "
-          f"under-routed={base_held['under_routed']}  "
-          f"over-routed={base_held['over_routed']}")
-    return best, h, base_held
+    print("\nShipped defaults on the same held-out half, for comparison:")
+    base = score(run_set(base_url, api_key, heldout, DEFAULT_BOUNDARIES))
+    print(f"  under-routed: {format_interval(base['under_routed'], base['n'])}   "
+          f"over-routed: {format_interval(base['over_routed'], base['n'])}   "
+          f"correct: {base['accuracy']}")
+
+    print("\nUnder-routed examples from held-out (quality risk):")
+    shown = 0
+    for r in held:
+        if TIERS[r["tier_expected"]] == STRONG and r["model_got"] != STRONG:
+            print(f"  score={r['score']!s:>6} {r['tier_got']:10} {r['text'][:70]}")
+            shown += 1
+    if not shown:
+        print("  none")
+    return chosen, h, base
 
 
 def main():
@@ -256,11 +338,16 @@ def main():
     if not base_url or not api_key:
         raise SystemExit("Set LITELLM_BASE_URL and LITELLM_API_KEY first.")
 
+    preflight(base_url, api_key)
     if "--sweep" in sys.argv:
         sweep(base_url, api_key)
     else:
-        extra = ({"custom_technical_keywords": DOMAIN_KEYWORDS}
+        prompts = load_prompts()
+        extra = ({"custom_technical_keywords":
+                  surviving_keywords(prompts["tuning"], prompts["held_out"])}
                  if "--keywords" in sys.argv else None)
+        if "--keywords" in sys.argv and extra and not extra["custom_technical_keywords"]:
+            raise SystemExit("No keyword survives the leakage guard; run without --keywords.")
         evaluate(base_url, api_key, extra, DEFAULT_BOUNDARIES,
                  detail="--detail" in sys.argv)
 

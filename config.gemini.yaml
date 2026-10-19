@@ -47,27 +47,16 @@ model_list:
         classifier_context_budget_chars: 8000
         classifier_context_include_assistant_turns: false
         return_raw_model_name: true
-        # Measured with POST /auto_router/test_routing: the shipped scorer gave
-        # this benchmark 1/4 tier accuracy. "Design a resilient event-driven order
-        # pipeline..." scored 0.0 with NO signals -- the built-in technical list
-        # does not contain architecture vocabulary, so the technicalTerms dimension
-        # (weight 0.25) never fires and the score collapses toward zero. Boundary
-        # tuning cannot repair a score of 0.0, so domain vocabulary is appended
-        # here instead. custom_technical_keywords adds to the built-in list rather
-        # than replacing it.
-        custom_technical_keywords:
-          - event-driven
-          - idempotency
-          - idempotent
-          - observability
-          - pipeline
-          - retries
-          - ordering
-          - failure isolation
-          - synchronous
-          - latency
-          - trade-off
-          - tradeoff
+        # No custom_technical_keywords here, deliberately.
+        #
+        # A candidate list (event-driven, idempotency, observability, pipeline,
+        # retries, ordering, failure isolation, synchronous, latency, tradeoff) was
+        # tried and every term had support in exactly ONE tuning prompt, because
+        # the list was derived from the benchmark prompts themselves. That is
+        # training on the test set. tools/check_keywords.py enforces a guard of
+        # support >= 3 tuning prompts and no held-out presence; all 12 candidates
+        # fail it, so none are configured. Re-derive any keyword list from a
+        # larger corpus before adding entries here.
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

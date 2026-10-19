@@ -225,9 +225,40 @@ uses model choice.
 above `simple_medium` (0.15) but below `medium_complex` (0.35), and `MEDIUM` maps to the
 cheap tier by design. Forcing it higher would require either remapping `MEDIUM` to the
 strong model — which sends roughly half of all traffic to the expensive tier and defeats
-the cost objective — or moving `simple_medium` below 0.0, which would fit four prompts and
-treat the scorer's noise floor as signal. Both are recorded as rejected rather than
-applied.
+the cost objective — or lowering `medium_complex`, which must be chosen on data rather
+than on four prompts.
+
+### Evaluation protocol and its limits
+
+`eval/prompts.yaml` holds 60 labelled prompts, split 30 tuning / 30 held out. Only the
+tuning half may be used to choose keywords and boundaries; the held-out half is reported
+once and never adjusted against.
+
+**Only one boundary can change a routing decision.** `SIMPLE` and `MEDIUM` map to the same
+model, as do `COMPLEX` and `REASONING`, so `simple_medium` and `complex_reasoning` move the
+tier *label* without changing the chosen model. The sweep holds both fixed at 0.15 and 0.60
+and varies only `medium_complex`. Do not read the fixed values as tuned.
+
+**Keyword guard.** A candidate keyword is accepted only if it appears in at least 3 tuning
+prompts and in no held-out prompt (`tools/check_keywords.py`). Every one of the 12
+candidates tried earlier had support in exactly **one** tuning prompt, because the list was
+derived from the benchmark prompts themselves. All 12 fail the guard, so
+`config.gemini.yaml` configures none of them. The previously reported 3/4 that depended on
+those keywords was training on the test set and is not a result.
+
+**Selection rule is a policy, not a measurement.** Configurations are ranked by fewest
+under-routed prompts (quality risk) and then fewest over-routed (wasted spend). Among ties
+the middle of the plateau is chosen rather than the first hit, so the selected boundary has
+equal-scoring neighbours on both sides.
+
+**Counts are reported with 95% Wilson intervals.** On 30 held-out prompts one prompt is
+about 3 points, so an interval is more honest than a single percentage.
+
+**Known limits of this evaluation set.** All 60 prompts were written by one author in one
+sitting, so they share a style that real traffic will not. Only the `MEDIUM`/`COMPLEX`
+boundary affects the binary decision, so label noise at that boundary moves the
+under-routed count directly; those labels deserve hand review. The set is large enough to
+rank a handful of configurations, not to certify an accuracy figure.
 
 **The tier map then decides the rest.** `MEDIUM` maps to the cheap tier in this project's
 design, so a mid-tier score of 0.175 is served by Flash-Lite. Remapping `MEDIUM` to the
