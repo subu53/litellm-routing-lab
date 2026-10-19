@@ -256,18 +256,55 @@ measurement of difficulty.
 
 **The 60-prompt set confounds hardness with length.** Its hard prompts are
 multi-sentence scenarios and its easy prompts are one-liners, so a length gate would score
-well without measuring difficulty. `tools/compare_length.py` reports the AUC of the score
-against the AUC of a plain word count on the same labels; if they are close, the router adds
-nothing beyond sentence count. `eval/prompts_2x2.yaml` and
-`tools/test_length_confound.py` test this directly with 10 prompts in each of four cells
-(short-hard, short-easy, long-hard, long-easy), with pass criteria written into the prompt
-file before the run. Results are reported as measured.
+well without measuring difficulty. A plain word count separates those labels essentially
+perfectly:
+
+| Split | AUC by classifier score | AUC by word count |
+|---|---|---|
+| tuning | 0.929 | **1.000** |
+| held-out | 0.725 | **1.000** |
+| pooled | 0.836 | **0.999** |
+
+Word count ranks the two classes almost perfectly on every split and beats the classifier's
+own score pooled (0.999 vs 0.836).
+
+**The 2x2 test controls for it directly.** 40 fresh prompts, 10 per cell, with length and
+difficulty crossed on purpose (`eval/prompts_2x2.yaml`, run by
+`tools/test_length_confound.py`). The prediction and pass criteria were written into the
+prompt file before the run and are printed alongside the result.
+
+| Cell | Median words | Routed as difficulty requires |
+|---|---|---|
+| short + hard | 7 | **0/10** |
+| long + hard | 53 | 10/10 |
+| short + easy | 5 | 8/10 |
+| long + easy | 54 | **0/10** |
+
+**Verdict: SUPPORTED.** Every short-but-hard request went to the cheap model and every
+long-but-easy request went to the strong model.
+
+**The short cells are the decisive evidence**, because they hold length fixed at 5-7 words
+while difficulty varies. All ten short-hard prompts scored **-0.1**, and the ten short-easy
+prompts scored -0.1 or -0.15. The scorer rates "Why do distributed locks fail under clock
+skew?" as identically easy to "Spell Kubernetes." With length controlled, it does not detect
+difficulty at all.
+
+The two over-routed short-easy prompts show the same mechanism from the other side:
+"What is a race condition?" and "Spell Kubernetes" both scored **0.05** and reached the strong
+model, because both contain technical vocabulary. The keyword dimension fires on the wrong
+signal.
+
+At the interim threshold anything longer than roughly one line crosses to the strong model,
+which is why the 60-prompt set reported 0/31 under-routed. **That number measured length, not
+difficulty.**
+
 **Conclusion.** LiteLLM's built-in heuristic is a surface-form detector, not a complexity
 classifier, on this workload. Its signals are prompt length, the presence of a "step by step"
 style phrase, and a small technical vocabulary; a hard request written conversationally scores
-0.0, exactly as an empty prompt does. No tier boundary fixes this, and the configuration is
-therefore left at the shipped defaults rather than fitted to the pooled scores. A threshold
-chosen on all 60 prompts would have no independent data left to confirm it.
+0.0, exactly as an empty prompt does. No tier boundary fixes this. The configuration is
+marked INTERIM at the threshold the pooled curve selected, with the caveat that it trades
+under-routing for sending two thirds of traffic to the larger model; it is not presented as a
+validated operating point.
 
 ### Why the boundary cannot help
 

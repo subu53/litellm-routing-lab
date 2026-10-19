@@ -290,9 +290,6 @@ def dump_scores(base_url, api_key, path):
         writer.writeheader()
         writer.writerows(rows)
 
-    flash = sum(1 for r in rows
-                if TIERS[r["tier_expected"]] == STRONG
-                and float(r["score"]) >= DEFAULT_BOUNDARIES["medium_complex"])
     print(f"\nWrote {path}: {len(rows)} prompts")
     print(f"  scores: min={min(float(r['score']) for r in rows)} "
           f"max={max(float(r['score']) for r in rows)}")
@@ -300,9 +297,17 @@ def dump_scores(base_url, api_key, path):
         sub = [r for r in rows if r["split"] == split]
         hard = sum(1 for r in sub if r["label"] == "hard")
         print(f"  {split}: {len(sub)} prompts, {hard} hard / {len(sub) - hard} easy")
-    print(f"  sent to Flash under shipped defaults "
-          f"(medium_complex={DEFAULT_BOUNDARIES['medium_complex']}): "
-          f"{flash}/{len(rows)}")
+
+    # Report the routing outcome for EVERY threshold candidate, not one assumed
+    # default. An earlier version reported only the DEFAULT_BOUNDARIES cut, which
+    # printed "0/60 to Flash" while the running config used -0.075 and sent 40/60.
+    scores = sorted({float(r["score"]) for r in rows})
+    midpoints = [scores[0] - 0.01] + [(a + b) / 2 for a, b in zip(scores, scores[1:])]
+    print("\n  prompts sent to Flash, by threshold:")
+    for t in sorted(set([DEFAULT_BOUNDARIES["medium_complex"]] + midpoints)):
+        to_flash = sum(1 for r in rows if float(r["score"]) >= t)
+        note = "  <- shipped default" if abs(t - DEFAULT_BOUNDARIES["medium_complex"]) < 1e-9 else ""
+        print(f"    t={t:7.3f}  {to_flash:>2}/{len(rows)} to Flash{note}")
     return rows
 
 
