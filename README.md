@@ -194,21 +194,34 @@ classifier's actual decision without spending a completion:
 ```json
 {"routed_model": "gemini-flash-lite", "routing_decision": {
   "cause": "heuristic_scorer", "tier": "MEDIUM", "score": 0.175,
-  "signals": ["reasoning (step by step)"],
-  "tier_boundaries": {"simple_medium": 0.10, "medium_complex": 0.25,
-                      "complex_reasoning": 0.45}}}
+  "signals": ["reasoning (step by step)"]}}
 ```
 
-The scorer rated the REASONING prompt at **0.175**. At the **documented defaults**
-(`0.15 / 0.35 / 0.60`) that score reaches **COMPLEX** and would have been served by
-`gemini-3.5-flash`. With the lowered `medium_complex: 0.25` it fell to **MEDIUM** and
-went to Flash-Lite.
+All four prompts, measured against both boundary sets:
 
-So the misrouting was caused by this repository's own boundary tuning, not by the
-classifier alone. Lowering a boundary pulls mid-range scores *down* into cheaper tiers,
-which is the opposite of the intended effect. The override has been removed and both
-free configs now use the shipped defaults. **Re-run `benchmark.py routed` after pulling
-to see the corrected routing.**
+| Case | Score | Signals detected | Tier (defaults) | Tier (tuned) |
+|---|---|---|---|---|
+| simple | -0.1 | short (7 tokens) | SIMPLE | SIMPLE |
+| short_explanation | -0.1 | short (13 tokens) | SIMPLE | SIMPLE |
+| architecture | 0.0 | **none** | SIMPLE | SIMPLE |
+| tradeoff | 0.175 | reasoning only | MEDIUM | MEDIUM |
+
+Identical under both sets — **1/4 tier accuracy either way**. So boundary tuning was
+never the cause, and an earlier revision of this README that blamed it was wrong.
+
+**The actual cause is vocabulary.** The tier boundaries are `0.15 / 0.35 / 0.60`, so
+`SIMPLE` covers everything below 0.15. `architecture` scored **0.0 with no signals at
+all**: the prompt says "event-driven," "idempotency," "retries," "observability," and the
+built-in technical list matched none of them. The `technicalTerms` dimension carries
+weight 0.25 and never fired, so the score collapsed to zero and was indistinguishable
+from a greeting. `tradeoff` reached 0.175 on its reasoning marker alone. No boundary
+value repairs a 0.0 score.
+
+**The tier map then decides the rest.** `MEDIUM` maps to the cheap tier in this project's
+design, so a mid-tier score of 0.175 is served by Flash-Lite. Remapping `MEDIUM` to the
+strong model would send this prompt to Flash, but it would also send every MEDIUM prompt
+there, which defeats the cost objective the project exists to measure. That tradeoff is
+recorded rather than applied.
 
 An earlier revision of this project also shipped `tools/explain_scoring.py`, a replica of
 the scorer built from the documentation. It predicted 0.800 for the same prompt the real
