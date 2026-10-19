@@ -1,0 +1,155 @@
+# Labelled evaluation set for the complexity router.
+#
+# Design rules:
+#   - 30 tuning prompts and 30 held-out prompts (60 total), spread across the
+#     four tiers with SIMPLE and REASONING over-represented, since those are the
+#     tiers a keyword scorer most often confuses.
+#   - Both halves include the adversarial cases that break a keyword scorer:
+#       * hard prompts written in plain language, with no technical vocabulary
+#       * easy prompts that happen to contain technical words
+#   - Tuning half is for choosing keywords and boundaries. Report only held-out.
+#
+# `tier` is the intended complexity of the request, not a claim about what any
+# scorer should output. Edit freely; keep the split when tuning.
+
+tuning:
+  # ---- SIMPLE: one-step, factual, short ----
+  - tier: SIMPLE
+    text: "Reply with only the word blue."
+  - tier: SIMPLE
+    text: "What is the capital of Kenya?"
+  - tier: SIMPLE
+    text: "Say hello in Spanish."
+  - tier: SIMPLE
+    text: "How many days are in February 2028?"
+  - tier: SIMPLE
+    text: "Convert 12 kilometres to miles."
+  - tier: SIMPLE
+    text: "What does HTTP stand for?"        # technical word, trivial answer
+  - tier: SIMPLE
+    text: "Name the process that reads a database index."   # jargon, easy task
+  - tier: SIMPLE
+    text: "Is 17 a prime number?"
+
+  # ---- MEDIUM: short explanation, light structure ----
+  - tier: MEDIUM
+    text: "Explain in two sentences why HTTPS is safer than HTTP."
+  - tier: MEDIUM
+    text: "Give three reasons a team might use a feature flag."
+  - tier: MEDIUM
+    text: "Describe what a retry policy does in one paragraph."
+  - tier: MEDIUM
+    text: "Summarise the difference between a stack and a queue."
+  - tier: MEDIUM
+    text: "List two symptoms of a slow database connection pool."
+  - tier: MEDIUM
+    text: "Explain why we write tests before fixing a bug."
+
+  # ---- COMPLEX: multi-part design, several constraints ----
+  - tier: COMPLEX
+    text: "Design a resilient event-driven order pipeline. Include idempotency, retries, and observability in four bullets."
+  - tier: COMPLEX
+    text: "We need to move a nightly batch job to run hourly without doubling cost. Outline the approach and name the tradeoffs in three bullets."
+  - tier: COMPLEX
+    text: "Explain how you would split a monolith into services when the team is small and downtime is expensive. Cover sequencing and rollback."
+  - tier: COMPLEX
+    text: "A service intermittently returns empty results under load but never errors. Give a diagnostic plan with the order you would try things."
+  - tier: COMPLEX
+    text: "Write a short design for a feature that must work offline first and sync later. Mention conflict handling and what you would deliberately leave out."
+  - tier: COMPLEX
+    text: "Three teams share one repository and keep breaking each other's builds. Propose a process change and explain what could go wrong with it."
+  - tier: SIMPLE
+    text: "What does CPU stand for?"          # jargon, trivial answer
+
+  # ---- REASONING: judgement, comparison, explicit step-by-step ----
+  - tier: REASONING
+    text: "Reason step by step about when a team should choose queues over synchronous APIs, considering latency, failure isolation, ordering, and operations."
+  - tier: REASONING
+    text: "Think through whether it is better to hire one senior engineer or three juniors for a struggling project. Weigh the risks on both sides and commit to a recommendation."
+  - tier: REASONING
+    text: "A bug appears only in production and never in staging. Reason through the possible causes in order of likelihood and say what evidence would rule each out."
+  - tier: REASONING
+    text: "Compare building a feature in-house against buying it, for a team that is already at capacity. Reason about the second-order costs, then give a decision."
+  - tier: REASONING
+    text: "Evaluate whether slowing down releases would actually improve reliability for a team whose incidents are mostly configuration mistakes."
+  - tier: REASONING
+    text: "Explain your reasoning for choosing a database migration strategy when the table is under constant write load, and state the conditions under which your choice becomes wrong."
+
+  # ---- Adversarial: hard but plain-language, no jargon at all ----
+  - tier: REASONING
+    text: "My team keeps shipping late and nobody agrees on why. Think through what you would ask each person to find the real cause, and what you would do first."
+  - tier: REASONING
+    text: "We have too many meetings and too little finished work. Reason about which few changes would actually help and which would just move the problem."
+  - tier: COMPLEX
+    text: "Work out a sensible order of operations for moving a busy shop to a new location without losing customers, listing what must happen before what."
+
+held_out:
+  # ---- SIMPLE ----
+  - tier: SIMPLE
+    text: "Spell the word necessary."
+  - tier: SIMPLE
+    text: "What is 15 percent of 200?"
+  - tier: SIMPLE
+    text: "Give me one synonym for happy."
+  - tier: SIMPLE
+    text: "Which planet is closest to the sun?"
+  - tier: SIMPLE
+    text: "Translate good morning into French."
+  - tier: SIMPLE
+    text: "What port does HTTPS use by default?"      # jargon, trivial answer
+  - tier: SIMPLE
+    text: "Name the SQL keyword that removes rows."    # jargon, trivial answer
+  - tier: SIMPLE
+    text: "Is the number 91 divisible by 7?"
+
+  # ---- MEDIUM ----
+  - tier: MEDIUM
+    text: "Explain in a short paragraph why backups are tested rather than just taken."
+  - tier: MEDIUM
+    text: "Give two ways to reduce build times and say which is cheaper to try first."
+  - tier: MEDIUM
+    text: "Describe what a health check endpoint is for, in two sentences."
+  - tier: MEDIUM
+    text: "Summarise why password length matters more than password complexity."
+  - tier: MEDIUM
+    text: "List three questions worth asking before adopting a new framework."
+  - tier: MEDIUM
+    text: "Explain why an API should return paginated results."
+
+  # ---- COMPLEX ----
+  - tier: COMPLEX
+    text: "A background job silently stops processing some records each night. Outline how you would find where they are lost and how you would prove the fix works."
+  - tier: COMPLEX
+    text: "Design a small internal tool that lets support staff see a customer's order history safely. Cover permissions, auditing, and what you would not build."
+  - tier: COMPLEX
+    text: "We need two systems to stay consistent during a partial outage. Describe your approach and the failure modes you are accepting."
+  - tier: COMPLEX
+    text: "Our deploys work but rollbacks do not. Propose a plan to make rollback routine, naming what you would change and what could regress."
+  - tier: COMPLEX
+    text: "Write a short plan for onboarding a new engineer to an unfamiliar codebase so they can ship safely in two weeks. Name the risks in your approach."
+  - tier: COMPLEX
+    text: "Two teams disagree on where a shared component should live. Outline how you would resolve it technically rather than through management."
+
+  # ---- REASONING ----
+  - tier: REASONING
+    text: "Reason step by step about whether it is better to fix a flaky test or delete it, given a team that has stopped trusting the test suite."
+  - tier: REASONING
+    text: "Think through the case for and against holding a weekly release train versus continuous delivery for a regulated team, then state your choice."
+  - tier: REASONING
+    text: "Compare two ways of splitting on-call among five engineers, reason about which fails more badly over a year, and justify your pick."
+  - tier: REASONING
+    text: "Evaluate a proposal to ban adding new dependencies. Reason about the benefits, the hidden costs, and the conditions under which the ban becomes counterproductive."
+  - tier: REASONING
+    text: "A team is rewarded for shipping features and penalised for outages. Reason about the behaviour this creates and what single change would improve it most."
+  - tier: REASONING
+    text: "Explain step by step how you would decide whether a slow page is worth optimising, and where your reasoning would be wrong."
+
+  # ---- Adversarial: hard but plain-language ----
+  - tier: REASONING
+    text: "Everyone agrees our product needs a redesign but nobody agrees what to change. Think through how you would find the one change worth making first."
+  - tier: REASONING
+    text: "We keep hiring and still fall behind. Reason about why adding people is not fixing the problem and what would."
+  - tier: COMPLEX
+    text: "Work out how to reorganise a shop floor so staff walk less without making the customer path longer, and say what you would test first."
+  - tier: COMPLEX
+    text: "Our two offices share one calendar and keep double-booking rooms. Outline a fix and say which part you would roll out last."
