@@ -190,9 +190,14 @@ No Terraform, gcloud, Docker, or API key is required for these:
 python tools/check_structure.py      # structural checks across all configs
 python tools/test_checker.py         # 15 negative tests: proves the checker bites
 python tools/test_retry.py           # 8 retry-policy tests
-python tools/test_compare_length.py  # 10 verdict-direction tests
+python tools/test_compare_length.py  # 11 verdict-direction and interpolation tests
 python tools/check_keywords.py       # keyword leakage guard
+bash   eval/test_archive_script.sh   # 20 checks on the archive script, via a mock proxy
 ```
+
+The archive test needs neither a proxy nor a Gemini key: it starts
+`tools/mock_proxy_for_tests.py`, which answers `POST /auto_router/test_routing` the way
+LiteLLM does. Any archive it produces is mock data and is deleted at the end.
 
 `check_structure.py` verifies balanced HCL delimiters, unterminated strings, project-wide
 resource reference resolution, YAML indentation, that all four router tiers point at
@@ -582,24 +587,41 @@ length gate on this prompt set**, not that it is a length gate in general.
 
 **No evidence archive is committed in this revision.** The numbers above were produced by
 the scripts in `tools/` against the config in this repository, but the raw output
-(`scores.csv`, the sweep tables, the 2x2 console output) was not saved. `eval/archive_results.sh`
-exists so that a run can be archived in one command, and a reader can regenerate every number
-here — but until it is run and committed, the tables below are not independently re-checkable
-from this checkout. That is a real gap, not a formality.
+(`scores.csv`, the sweep tables, the 2x2 console output) was not saved. Until a run is
+archived and committed, the tables above cannot be independently re-checked from this
+checkout. That is a real gap, not a formality.
+
+The archive step itself is tested, so a run should not fail for tooling reasons.
+`eval/test_archive_script.sh` starts `tools/mock_proxy_for_tests.py` — a stand-in for
+LiteLLM's `POST /auto_router/test_routing` — and asserts 20 behaviours, including the two
+that matter most:
+
+- with no `LITELLM_BASE_URL` / `LITELLM_API_KEY`, the script exits non-zero and creates **no**
+  output directory;
+- with a dead proxy, the script exits non-zero and creates **no** output directory;
+- if the endpoint dies mid-run, the partial directory is **removed** rather than left looking
+  like evidence.
+
+All 20 pass. That matters because a failed archive that leaves a timestamped directory of
+empty files is worse than no archive: it looks like evidence. The mock output is deleted by
+the test and must never be committed.
+
 `eval/archive_results.sh` writes one timestamped directory containing:
 
 | File | Shows |
 |---|---|
-| `environment.txt` | commit, config hash, `pip show litellm`, Python version |
+| `environment.txt` | commit, config hash, `pip show litellm`, Python version, platform |
 | `config.gemini.yaml` | the exact config under test |
 | `scores.csv` | one classifier score per prompt |
+| `dump-scores.txt` | that run's console summary, including prompts sent to Flash |
 | `sweep-thresholds.txt` | under- and over-routing at every threshold candidate |
 | `compare-length.txt` | score AUC against word-count AUC |
 | `2x2-confounds.txt` | the pre-registered four-cell test, with signals |
 
 Root-level `scores.csv` and `llm_baseline.csv` are gitignored because they are generated;
 anything under `eval/results/` is committed on purpose. To reproduce, start the proxy with
-`config.gemini.yaml` and run `bash eval/archive_results.sh` from the repository root.
+`config.gemini.yaml`, export `LITELLM_BASE_URL` and `LITELLM_API_KEY`, and run
+`bash eval/archive_results.sh` from the repository root.
 
 **The tier map then decides the rest.** `MEDIUM` maps to the cheap tier in this project's
 design, so a mid-tier score of 0.175 is served by Flash-Lite. Remapping `MEDIUM` to the
