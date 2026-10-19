@@ -6,4 +6,9 @@ benchmark-*.csv
 __pycache__/
 .tmp-verify/
 tools/_history.json
+
+# Generated scoring output is ignored at the root, but archived evidence under
+# eval/results/ is committed on purpose so the README's numbers can be re-checked.
 scores.csv
+llm_baseline.csv
+!eval/results/**

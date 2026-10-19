@@ -299,6 +299,13 @@ prompt file before the run and are printed alongside the result.
 **Verdict: SUPPORTED.** Every short-but-hard request went to the cheap model and every
 long-but-easy request went to the strong model.
 
+**These results are not independent, and the 2x2 carries the claim.** The defaults result,
+the AUC comparison and the 2x2 all use one scorer, one author's prompts and one LiteLLM
+version. Only the 2x2 was built to separate length from difficulty, so it is the evidence;
+the other two are consistent with it, not corroboration of it. What is shown is that **the
+free heuristic behaved as a length gate on this prompt set** — not that it is a length gate
+in general.
+
 **The short cells are the decisive evidence**, because they hold length fixed at 5-7 words
 while difficulty varies. All ten short-hard prompts scored **-0.1**, and the ten short-easy
 prompts scored -0.1 or -0.15. The scorer rates "Why do distributed locks fail under clock
@@ -313,6 +320,25 @@ signal.
 At the interim threshold anything longer than roughly one line crosses to the strong model,
 which is why the 60-prompt set reported 0/31 under-routed. **That number measured length, not
 difficulty.**
+
+**What fires besides length: signals per cell.** `test_length_confound.py` prints the
+classifier's `signals` list for every prompt and a per-cell tally. The observations recorded
+from that run are the only evidence in this project about non-length behaviour, so they are
+reported as observations, not as a model of the scorer.
+
+**An LLM classifier baseline is available and deliberately not called "the learned
+classifier".** `tools/llm_baseline.py` asks a general-purpose model (Flash-Lite by default)
+for a single word, `easy` or `hard`, on the same 40 prompts, and reports the same four cells
+plus classification latency and token cost. It is not Jev and its output does not describe
+Jev's behaviour. Its purpose is narrower: with the paid path still blocked, it is the only
+available check on whether *any* classifier beats prompt length on these cells. Run it with
+`GEMINI_API_KEY` set and no proxy required:
+
+```bash
+export GEMINI_API_KEY=...
+python3 tools/llm_baseline.py                    # Flash-Lite, 40 short calls
+python3 tools/llm_baseline.py --model gemini-3-flash
+```
 
 **Conclusion.** LiteLLM's built-in heuristic is a surface-form detector, not a complexity
 classifier, on this workload. Its signals are prompt length, the presence of a "step by step"
@@ -448,6 +474,30 @@ not. Each 2x2 cell holds 10 prompts, so a 10/10 result carries a 95% Wilson inte
 72-100% — strong but not precise. All results concern the **free built-in heuristic only**;
 whether a learned classifier separates the cells is untested. Boundary values are an interim
 choice, not a validated operating point. Savings in money are unmeasured.
+
+**These three results are not independent.** The defaults finding, the AUC comparison and the
+2x2 all use one scorer, one author's prompts and one LiteLLM version. Only the 2x2 was built
+to separate length from difficulty, so the claim rests on it; the others are consistent with
+it rather than corroboration. The accurate statement is that **the free heuristic behaved as a
+length gate on this prompt set**, not that it is a length gate in general.
+
+### Evidence archive
+
+The numbers above come from script output, so the output is committed next to the claim.
+`eval/archive_results.sh` writes one timestamped directory containing:
+
+| File | Shows |
+|---|---|
+| `environment.txt` | commit, config hash, `pip show litellm`, Python version |
+| `config.gemini.yaml` | the exact config under test |
+| `scores.csv` | one classifier score per prompt |
+| `sweep-thresholds.txt` | under- and over-routing at every threshold candidate |
+| `compare-length.txt` | score AUC against word-count AUC |
+| `2x2-confounds.txt` | the pre-registered four-cell test, with signals |
+
+Root-level `scores.csv` and `llm_baseline.csv` are gitignored because they are generated;
+anything under `eval/results/` is committed on purpose. To reproduce, start the proxy with
+`config.gemini.yaml` and run `bash eval/archive_results.sh` from the repository root.
 
 **The tier map then decides the rest.** `MEDIUM` maps to the cheap tier in this project's
 design, so a mid-tier score of 0.175 is served by Flash-Lite. Remapping `MEDIUM` to the

@@ -54,6 +54,38 @@ case("just outside tolerance: 0.85 vs 0.95", 0.85, 0.95,
 case("below chance score: 0.40 vs 0.70", 0.40, 0.70,
      "word count separates the classes better")
 
+
+def numbers_interpolate():
+    """The verdict must PRINT the values it was given, not hardcoded literals.
+
+    Substring checks above cannot catch a message that always says "1.000 vs
+    0.725". This feeds values that share no digits with the measured case and
+    requires both to appear in the formatted output.
+    """
+    problems = []
+    for a_score, a_words in [(0.9, 1.0), (0.123, 0.456), (0.611, 0.612)]:
+        text = verdict_for(a_score, a_words)
+        for value in (a_score, a_words):
+            rendered = f"{value:.3f}"
+            if rendered not in text:
+                problems.append(f"verdict_for({a_score}, {a_words}) omits "
+                                f"{rendered!r}: {text!r}")
+    return problems
+
+
+print("\nnumber interpolation")
+print("===================")
+problems = numbers_interpolate()
+if problems:
+    for p in problems:
+        print("FAIL ", p)
+    results.append((False, "verdict interpolates its numbers", "; ".join(problems), ""))
+else:
+    print("PASS  0.9 vs 1.0 renders '0.900' and '1.000'")
+    print("PASS  0.123 vs 0.456 renders both values")
+    print("PASS  0.611 vs 0.612 renders both values")
+    results.append((True, "verdict interpolates its numbers", "", ""))
+
 failed = [r for r in results if not r[0]]
 for ok, label, text, expected in results:
     print(f"{'PASS' if ok else 'FAIL'}  {label}")

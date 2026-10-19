@@ -43,7 +43,10 @@ def verdict_for(a_score, a_words, tolerance=0.05):
     """
     gap = abs(a_score - a_words)
     if gap <= tolerance:
-        return ("score and length rank almost identically - the classifier may be "
+        # Print the values even on a tie: "almost identically" is meaningless
+        # without them, since 0.80/0.82 and 0.51/0.52 are different situations.
+        return ("score and length rank almost identically "
+                f"({a_score:.3f} vs {a_words:.3f}) - the classifier may be "
                 "acting as a length gate")
     if a_words > a_score:
         return ("word count separates the classes better than the score "
