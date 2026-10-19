@@ -27,8 +27,13 @@ and what is untested.
 **Sammy S Mutuku**
 
 - GitHub: [@subu53](https://github.com/subu53)
-- LinkedIn: [linkedin.com/in/your-profile](https://www.linkedin.com/in/your-profile)
+- LinkedIn: [linkedin.com/in/samsubu](https://www.linkedin.com/in/samsubu)
 - Kaggle: [sammyssbu](https://www.kaggle.com/sammyssbu)
+
+Built with the NextWork "Route AI Requests with LiteLLM" brief as the starting point. The
+evaluation, the free-path configuration, and every result after the initial scaffold are
+this author's work; the repository history records what was changed and why, including the
+claims that were retracted.
 
 ## The problem
 
