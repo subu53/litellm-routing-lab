@@ -34,16 +34,19 @@ DEFAULT_BOUNDARIES = {"simple_medium": 0.15, "medium_complex": 0.35, "complex_re
 TUNED_BOUNDARIES = {"simple_medium": 0.10, "medium_complex": 0.25, "complex_reasoning": 0.45}
 
 
-def classify(base_url, api_key, prompt, boundaries):
+def classify(base_url, api_key, prompt, boundaries, extra=None):
+    config = {
+        "tiers": TIERS,
+        "classifier_type": "heuristic",
+        "return_raw_model_name": True,
+        "tier_boundaries": boundaries,
+    }
+    if extra:
+        config.update(extra)
     payload = json.dumps({
         "model": "jev-router",
         "messages": [{"role": "user", "content": prompt}],
-        "complexity_router_config": {
-            "tiers": TIERS,
-            "classifier_type": "heuristic",
-            "return_raw_model_name": True,
-            "tier_boundaries": boundaries,
-        },
+        "complexity_router_config": config,
     }).encode("utf-8")
     request = urllib.request.Request(
         f"{base_url}/auto_router/test_routing",
@@ -56,13 +59,14 @@ def classify(base_url, api_key, prompt, boundaries):
         return json.loads(response.read().decode("utf-8"))
 
 
-def report(base_url, api_key, label, boundaries):
+def report(base_url, api_key, label, boundaries, extra=None):
     print(f"\n{label}")
-    print(f"  boundaries: {boundaries}")
+    if extra:
+        print(f"  extra config: {extra}")
     print(f"  {'case':18} {'score':>7}  {'tier':10} {'routed model':22} result")
     agree = 0
     for name, expected, prompt in CASES:
-        body = classify(base_url, api_key, prompt, boundaries)
+        body = classify(base_url, api_key, prompt, boundaries, extra)
         decision = body.get("routing_decision", {})
         score = decision.get("score")
         tier = decision.get("tier")
@@ -76,6 +80,14 @@ def report(base_url, api_key, label, boundaries):
     return agree
 
 
+# Vocabulary the shipped technical list was measured not to cover.
+DOMAIN_KEYWORDS = [
+    "event-driven", "idempotency", "idempotent", "observability", "pipeline",
+    "retries", "ordering", "failure isolation", "synchronous", "latency",
+    "trade-off", "tradeoff",
+]
+
+
 def main():
     base_url = os.environ.get("LITELLM_BASE_URL", "").rstrip("/")
     api_key = os.environ.get("LITELLM_API_KEY", "")
@@ -84,13 +96,28 @@ def main():
 
     print("Real classifier via POST /auto_router/test_routing")
     print("(spends no completion requests)")
-    default_agree = report(base_url, api_key, "SHIPPED DEFAULT boundaries", DEFAULT_BOUNDARIES)
+
+    results = {}
+    results["defaults"] = report(
+        base_url, api_key, "A. SHIPPED DEFAULT boundaries", DEFAULT_BOUNDARIES)
+
     if "--tuned" in sys.argv:
-        tuned_agree = report(base_url, api_key, "TUNED boundaries (measured worse)", TUNED_BOUNDARIES)
-        print(f"\ndefaults {default_agree}/4 vs tuned {tuned_agree}/4")
-    else:
-        print("\nRun with --tuned to compare the boundary set that measured worse.")
+        results["tuned"] = report(
+            base_url, api_key, "B. TUNED boundaries (lowered medium_complex)",
+            TUNED_BOUNDARIES)
+
+    if "--keywords" in sys.argv:
+        results["keywords"] = report(
+            base_url, api_key, "C. DEFAULT boundaries + custom_technical_keywords",
+            DEFAULT_BOUNDARIES, {"custom_technical_keywords": DOMAIN_KEYWORDS})
+
+    print("\nsummary:", "  ".join(f"{k}={v}/4" for k, v in results.items()))
+    if results.get("keywords", 0) > results["defaults"]:
+        print("custom_technical_keywords improved tier accuracy; keep them.")
+    elif "keywords" in results:
+        print("custom_technical_keywords did NOT improve accuracy; do not claim it did.")
 
 
 if __name__ == "__main__":
     main()
+
