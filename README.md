@@ -223,6 +223,44 @@ choice; the earlier sweep wrongly treated the label-ordering constraint as a flo
 usable threshold. `tools/sweep_thresholds.py` fixes this by scoring each prompt once and
 evaluating every midpoint between observed scores offline.
 
+### Offline threshold sweep: no threshold separates the two classes
+
+Scores were collected once for all 60 prompts and every midpoint between observed scores was
+evaluated offline. There are only ten such candidates, because the set produces roughly eight
+distinct scores:
+
+```
+-0.150  -0.125  -0.075  -0.025  0.025  0.100  0.163  0.188  0.210  0.335
+```
+
+Held-out results at the useful thresholds:
+
+| Threshold | Hard prompts sent to Flash | Easy prompts over-routed | Sum |
+|---|---|---|---|
+| -0.160 | 16/16 | 14/14 | 14 |
+| -0.075 | 16/16 | 7/14 | 7 |
+| 0.025 | 5/16 | 4/14 | 15 |
+| 0.163 | 5/16 | 1/14 | 12 |
+| 0.210 | 0/16 | 0/14 | 16 |
+
+**No threshold works.** Rescuing the hard prompts requires a threshold at or below -0.075,
+which sends 23 of 30 held-out prompts to Flash — that is near-default-strong pricing with
+extra steps, not routing. Every threshold that keeps the strong model rare leaves the plain
+language hard prompts on the cheap model.
+
+**Why: the two classes are not separated.** Hard prompts score from -0.150 to 0.210; easy
+prompts score from -0.150 to 0.100. The ranges overlap almost completely, so a single cut on
+this score cannot distinguish them. The score also takes only about eight discrete values
+across 60 prompts, which indicates a few surface-form detectors firing rather than a graded
+measurement of difficulty.
+
+**Conclusion.** LiteLLM's built-in heuristic is a surface-form detector, not a complexity
+classifier, on this workload. Its signals are prompt length, the presence of a "step by step"
+style phrase, and a small technical vocabulary; a hard request written conversationally scores
+0.0, exactly as an empty prompt does. No tier boundary fixes this, and the configuration is
+therefore left at the shipped defaults rather than fitted to the pooled scores. A threshold
+chosen on all 60 prompts would have no independent data left to confirm it.
+
 ### Why the boundary cannot help
 
 Every under-routed held-out prompt scored **0.0, -0.05, or 0.175**. The `COMPLEX` tier

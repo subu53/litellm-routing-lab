@@ -6,3 +6,4 @@ benchmark-*.csv
 __pycache__/
 .tmp-verify/
 tools/_history.json
+scores.csv
