@@ -189,33 +189,45 @@ The 33% average latency drop is therefore "a smaller model was used for everythi
 not evidence of correct complexity routing.
 
 **Why it happened — measured, not guessed.** `POST /auto_router/test_routing` reports the
-classifier's actual decision without spending a completion:
+classifier's actual decision without spending a completion. Two configurations were
+measured: the shipped defaults, and defaults plus domain vocabulary appended via
+`custom_technical_keywords`.
 
-```json
-{"routed_model": "gemini-flash-lite", "routing_decision": {
-  "cause": "heuristic_scorer", "tier": "MEDIUM", "score": 0.175,
-  "signals": ["reasoning (step by step)"]}}
-```
+| Case | Score (defaults) | Score (+keywords) | Signals after keywords | Model (defaults) | Model (+keywords) |
+|---|---|---|---|---|---|
+| simple | -0.1 | -0.1 | short (7 tokens) | flash-lite | flash-lite |
+| short_explanation | -0.1 | -0.1 | short (13 tokens) | flash-lite | flash-lite |
+| architecture | 0.0 | **0.25** | technical (event-driven, idempotency, observability) | flash-lite | flash-lite |
+| tradeoff | 0.175 | **0.425** | reasoning + technical (latency, ordering, failure isolation) | flash-lite | **gemini-3.5-flash** |
 
-All four prompts, measured against both boundary sets:
+Model-choice accuracy **2/4 → 3/4**. Appending domain vocabulary roughly doubled both
+technical scores and moved the reasoning prompt to `COMPLEX`, where it is served by the
+strong model.
 
-| Case | Score | Signals detected | Tier (defaults) | Tier (tuned) |
-|---|---|---|---|---|
-| simple | -0.1 | short (7 tokens) | SIMPLE | SIMPLE |
-| short_explanation | -0.1 | short (13 tokens) | SIMPLE | SIMPLE |
-| architecture | 0.0 | **none** | SIMPLE | SIMPLE |
-| tradeoff | 0.175 | reasoning only | MEDIUM | MEDIUM |
+**The cause was vocabulary, not boundaries.** `architecture` originally scored **0.0 with
+no signals at all**: the prompt names "event-driven," "idempotency," "retries," and
+"observability," and the built-in technical list matched none of them. The
+`technicalTerms` dimension carries weight 0.25 and never fired, so the score collapsed to
+zero and was indistinguishable from a greeting. No boundary value repairs a 0.0 score.
+Boundary tuning was measured and gave identical results (1/4 on tier labels either way),
+so an earlier revision of this README that blamed the boundaries was wrong.
 
-Identical under both sets — **1/4 tier accuracy either way**. So boundary tuning was
-never the cause, and an earlier revision of this README that blamed it was wrong.
+**Two metrics, and only one of them matters.** This project originally scored routing by
+matching the classifier's tier against a hand-written "expected tier" per prompt, which
+reported 1/4 for both configurations — while the model choices had in fact improved. The
+tier labels are opinions, and one of them is wrong: "Explain in two sentences why HTTPS is
+safer than HTTP" is labelled MEDIUM but is a plainly simple request, so routing it to the
+cheap model is correct and the label is not. Model-choice accuracy is the outcome that
+affects cost and latency, so `tools/test_routing.py` now reports both and the conclusion
+uses model choice.
 
-**The actual cause is vocabulary.** The tier boundaries are `0.15 / 0.35 / 0.60`, so
-`SIMPLE` covers everything below 0.15. `architecture` scored **0.0 with no signals at
-all**: the prompt says "event-driven," "idempotency," "retries," "observability," and the
-built-in technical list matched none of them. The `technicalTerms` dimension carries
-weight 0.25 and never fired, so the score collapsed to zero and was indistinguishable
-from a greeting. `tradeoff` reached 0.175 on its reasoning marker alone. No boundary
-value repairs a 0.0 score.
+**What remains unmatched.** `architecture` still routes to Flash-Lite at 0.25, which is
+above `simple_medium` (0.15) but below `medium_complex` (0.35), and `MEDIUM` maps to the
+cheap tier by design. Forcing it higher would require either remapping `MEDIUM` to the
+strong model — which sends roughly half of all traffic to the expensive tier and defeats
+the cost objective — or moving `simple_medium` below 0.0, which would fit four prompts and
+treat the scorer's noise floor as signal. Both are recorded as rejected rather than
+applied.
 
 **The tier map then decides the rest.** `MEDIUM` maps to the cheap tier in this project's
 design, so a mid-tier score of 0.175 is served by Flash-Lite. Remapping `MEDIUM` to the
