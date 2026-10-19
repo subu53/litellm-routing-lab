@@ -1,7 +1,7 @@
 # LiteLLM Routing Lab
 
 A cost-aware AI gateway that routes each request to the cheapest Gemini model that can
-actually handle it — with measured latency and spend evidence rather than intuition.
+actually handle it â€” with measured latency and spend evidence rather than intuition.
 
 Deployed on Google Cloud Run, backed by Cloud SQL PostgreSQL, and configured entirely
 as code.
@@ -18,28 +18,28 @@ This project measures that waste, then removes it.
 ## Architecture
 
 ```
-                            ┌──────────────────────────┐
-  benchmark.py ──POST──────▶│  Cloud Run: litellm-      │
-  (4 fixed prompts)         │  gateway  (public, TLS)   │
-                            └────────────┬─────────────┘
-                                         │ virtual key auth + budget
-                                         ▼
-                            ┌──────────────────────────┐
-                            │  LiteLLM proxy 1.104.0   │
-                            │  model_list in config    │
-                            └───┬──────────────────┬───┘
-              model: jev-router │                  │ model: gemini-flash
-                                ▼                  ▼
-                    ┌───────────────────┐   ┌──────────────┐
-                    │ complexity_router │   │   Vertex AI  │
-                    │ classifier: jev   │   │  Gemini 3.5  │
-                    └─────────┬─────────┘   └──────────────┘
-                              │ SIMPLE / MEDIUM / COMPLEX / REASONING
-                              ▼
-                    ┌───────────────────────────────┐
-                    │ Flash-Lite  ← SIMPLE, MEDIUM  │
-                    │ Flash       ← COMPLEX, REASON │
-                    └───────────────────────────────┘
+                            â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+  benchmark.py â”€â”€POSTâ”€â”€â”€â”€â”€â”€â–¶â”‚  Cloud Run: litellm-      â”‚
+  (4 fixed prompts)         â”‚  gateway  (public, TLS)   â”‚
+                            â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                                         â”‚ virtual key auth + budget
+                                         â–¼
+                            â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                            â”‚  LiteLLM proxy 1.104.0   â”‚
+                            â”‚  model_list in config    â”‚
+                            â””â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”˜
+              model: jev-router â”‚                  â”‚ model: gemini-flash
+                                â–¼                  â–¼
+                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                    â”‚ complexity_router â”‚   â”‚   Vertex AI  â”‚
+                    â”‚ classifier: jev   â”‚   â”‚  Gemini 3.5  â”‚
+                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+                              â”‚ SIMPLE / MEDIUM / COMPLEX / REASONING
+                              â–¼
+                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+                    â”‚ Flash-Lite  â† SIMPLE, MEDIUM  â”‚
+                    â”‚ Flash       â† COMPLEX, REASON â”‚
+                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 Persistence layer: Cloud SQL PostgreSQL 15 stores virtual keys, router config, request
@@ -61,7 +61,7 @@ exist in no file and no image layer.
 
 **Spend is capped, not just observed.** A `$1` virtual-key budget acts as a hard
 guardrail; exceeding it is expected to return HTTP 422. (Not yet confirmed against a live
-deployment — see the runbook's Secret Mission step.)
+deployment â€” see the runbook's Secret Mission step.)
 
 ## Two ways to run this
 
@@ -111,7 +111,7 @@ resource reference resolution, YAML indentation, that all four router tiers poin
 declared aliases, that exactly one valid classifier is configured, that a non-Jev config
 carries no stale Jev settings, and that `benchmark.py` still exposes `run_case`/`main`.
 
-**It is not `terraform validate`** — provider schema errors can still slip through. It
+**It is not `terraform validate`** â€” provider schema errors can still slip through. It
 catches the failure class that matters for hand-assembled config: the typo that costs you
 twenty minutes in Cloud Shell.
 
@@ -133,8 +133,8 @@ Then open `terraform output -raw admin_url`.
 
 ## Benchmark
 
-The same four prompts run twice — once pinned to `gemini-flash`, once through
-`jev-router` — so the comparison isolates routing as the only variable.
+The same four prompts run twice â€” once pinned to `gemini-flash`, once through
+`jev-router` â€” so the comparison isolates routing as the only variable.
 
 Paid path:
 
@@ -156,7 +156,7 @@ python3 benchmark.py routed
 
 Each row records `case`, `expected_tier`, `requested_model`, `returned_model`,
 `latency_ms`, and `classifier_cost_header`. On the free path
-`classifier_cost_header` is always empty — the heuristic scorer is local and free,
+`classifier_cost_header` is always empty â€” the heuristic scorer is local and free,
 which is itself a headline result.
 
 Transient `429`/`503` responses are retried with exponential backoff. A retried case
@@ -179,8 +179,73 @@ tier is `gemini-3.5-flash` and the cheap tier is `gemini-3.1-flash-lite`.
 Average latency 6,642 ms baseline vs 4,463 ms routed. Classifier cost empty on every
 routed row.
 
+Note: the baseline `returned_model` column reports the alias (`gemini-flash`), not the
+resolved provider ID, because `return_raw_model_name` only affects the router path.
+
+### Router evaluation on 60 labelled prompts
+
+`python3 tools/evaluate_router.py --sweep` scores the **model** the router chooses and
+separates the two failure directions: under-routing puts hard work on the cheap model and
+risks quality, over-routing puts easy work on the strong model and wastes money.
+
+Boundaries 0.15 and 0.60 were held fixed â€” they cannot change the chosen model â€” and only
+`medium_complex` was swept, on the 30 tuning prompts:
+
+| medium_complex | correct | under-routed | over-routed |
+|---|---|---|---|
+| 0.20 | 17/30 | 13 | 0 |
+| 0.25 | 17/30 | 13 | 0 |
+| 0.30 | 17/30 | 13 | 0 |
+| 0.35 (shipped) | 15/30 | 15 | 0 |
+| 0.40 | 15/30 | 15 | 0 |
+| 0.45 | 15/30 | 15 | 0 |
+
+The plateau 0.20-0.30 is a real improvement on tuning (13 vs 15 under-routed). Following a
+middle-of-plateau rule, **0.25** was chosen and confirmed once on the 30 held-out prompts:
+
+| Held-out (30 prompts) | under-routed | over-routed | correct |
+|---|---|---|---|
+| chosen 0.25 | 16/30 (95% CI 36-70%) | 0/30 (95% CI 0-11%) | 14/30 |
+| shipped 0.35 | 16/30 (95% CI 36-70%) | 0/30 (95% CI 0-11%) | 14/30 |
+
+**The tuning gain did not transfer.** On held-out the two configurations are identical.
+
+### Why the boundary cannot help
+
+Every under-routed held-out prompt scored **0.0, -0.05, or 0.175**. The `COMPLEX` tier
+begins at 0.35, so **no boundary value between 0.10 and 0.45 can lift a 0.0 score into the
+strong tier**. The scores, not the thresholds, are the limiting factor, and on this held-out
+sample no prompt falls in the 0.25-0.35 window where the two configurations would differ.
+
+The prompts that scored **0.0** are the ones written in *plain language*:
+
+| Under-routed held-out prompt | Score |
+|---|---|
+| "We keep hiring and still fall behind. Reason about why adding people is not fixing the problem and what would." | 0.0 |
+| "Our deploys work but rollbacks do not. Propose a plan to make rollback routine..." | 0.0 |
+| "A team is rewarded for shipping features and penalised for outages. Reason about the behaviour this creates..." | 0.0 |
+| "Two teams disagree on where a shared component should live. Outline how you would resolve it technically..." | 0.0 |
+
+These are hard requests that use no technical vocabulary, so the `technicalTerms` dimension
+(weight 0.25) never fires and the score collapses to zero â€” the same score as an empty
+prompt. The prompts that did reach 0.175 contain a reasoning marker such as "reason step by
+step".
+
+**This is the central finding of the project.** A keyword-and-score heuristic measures
+whether a prompt *sounds* technical, not whether it *is* hard. Six of the held-out prompts
+were written deliberately without jargon, and the router under-routed all of them. That is
+the concrete case for a learned classifier â€” which is what the paid Jev path in
+`config.yaml` exists to provide, and it is why this project now has a measured reason to
+use one rather than an assumed one.
+
+**Cost consequence, stated plainly.** Under-routing is not free savings: 16 of 30 non-trivial
+held-out requests were answered by the cheaper model. The project's own latency numbers show
+why that matters â€” the baseline spread between easy and hard prompts on the same model was
+10x (1,525 ms vs 15,392 ms). Halving cost by sending hard work to the small model may simply
+be buying a lower quality answer.
+
 **What this shows.** Without routing, the same model served a one-word prompt and a
-reasoning prompt whose measured latency differed by **10×** (1,525 ms vs 15,392 ms).
+reasoning prompt whose measured latency differed by **10Ã—** (1,525 ms vs 15,392 ms).
 That spread is the waste this project targets, and it is measured rather than assumed.
 
 **What this does not show.** The heuristic scorer sent **all four prompts to the cheap
@@ -188,7 +253,7 @@ tier**, so `gemini-3.5-flash` was never selected and has no routed-path latency 
 The 33% average latency drop is therefore "a smaller model was used for everything",
 not evidence of correct complexity routing.
 
-**Why it happened — measured, not guessed.** `POST /auto_router/test_routing` reports the
+**Why it happened â€” measured, not guessed.** `POST /auto_router/test_routing` reports the
 classifier's actual decision without spending a completion. Two configurations were
 measured: the shipped defaults, and defaults plus domain vocabulary appended via
 `custom_technical_keywords`.
@@ -200,7 +265,7 @@ measured: the shipped defaults, and defaults plus domain vocabulary appended via
 | architecture | 0.0 | **0.25** | technical (event-driven, idempotency, observability) | flash-lite | flash-lite |
 | tradeoff | 0.175 | **0.425** | reasoning + technical (latency, ordering, failure isolation) | flash-lite | **gemini-3.5-flash** |
 
-Model-choice accuracy **2/4 → 3/4**. Appending domain vocabulary roughly doubled both
+Model-choice accuracy **2/4 â†’ 3/4**. Appending domain vocabulary roughly doubled both
 technical scores and moved the reasoning prompt to `COMPLEX`, where it is served by the
 strong model.
 
@@ -214,19 +279,12 @@ so an earlier revision of this README that blamed the boundaries was wrong.
 
 **Two metrics, and only one of them matters.** This project originally scored routing by
 matching the classifier's tier against a hand-written "expected tier" per prompt, which
-reported 1/4 for both configurations — while the model choices had in fact improved. The
+reported 1/4 for both configurations â€” while the model choices had in fact improved. The
 tier labels are opinions, and one of them is wrong: "Explain in two sentences why HTTPS is
 safer than HTTP" is labelled MEDIUM but is a plainly simple request, so routing it to the
 cheap model is correct and the label is not. Model-choice accuracy is the outcome that
 affects cost and latency, so `tools/test_routing.py` now reports both and the conclusion
 uses model choice.
-
-**What remains unmatched.** `architecture` still routes to Flash-Lite at 0.25, which is
-above `simple_medium` (0.15) but below `medium_complex` (0.35), and `MEDIUM` maps to the
-cheap tier by design. Forcing it higher would require either remapping `MEDIUM` to the
-strong model — which sends roughly half of all traffic to the expensive tier and defeats
-the cost objective — or lowering `medium_complex`, which must be chosen on data rather
-than on four prompts.
 
 ### Evaluation protocol and its limits
 
@@ -272,11 +330,11 @@ router scored at 0.175, because the shipped keyword lists and dimension scoring 
 published. It has been replaced by `tools/test_routing.py`, which queries the real
 classifier.
 
-**Two measurement caveats.** The `simple` routed case at 7,573 ms is 5× its baseline and
+**Two measurement caveats.** The `simple` routed case at 7,573 ms is 5Ã— its baseline and
 consistent with provider cold start rather than routing overhead, so case 1 of a run is
 unreliable. Rows are single samples, not averages.
 
-**Honest conclusion.** The routing mechanism works — aliases resolve, the tier model
+**Honest conclusion.** The routing mechanism works â€” aliases resolve, the tier model
 serves the request, and `return_raw_model_name` exposes the decision. The *quality of the
 classification* does not: a keyword-and-score heuristic rated a step-by-step tradeoff
 analysis as cheap-tier. This is the gap a learned classifier is meant to close, and the
@@ -296,7 +354,7 @@ Gemini 3.1 Flash-Lite 500, Gemini 2.5 Flash 20. The router consumes 4 requests p
 benchmark, so either free path is comfortably inside quota.
 
 On the paid path, Cloud SQL compute and storage are the only meaningful standing
-charges. Note that the `$1` LiteLLM virtual-key budget caps gateway traffic only — it
+charges. Note that the `$1` LiteLLM virtual-key budget caps gateway traffic only â€” it
 does **not** cap Google Cloud billing.
 
 To tear down the paid path:
@@ -311,7 +369,7 @@ gcloud secrets delete typesafe-api-key   # created outside Terraform
 - **`gemini-3.5-flash` is real; `gemini-3.5-flash-lite` is not.** An earlier revision of
   this README claimed both were fabricated. That was wrong. Gemini 3.5 Flash shipped at
   general availability at Google I/O 2026 under the model ID `gemini-3.5-flash`, priced at
-  $1.50/million input and $9/million output. However, **no 3.5 Flash-Lite exists** — the
+  $1.50/million input and $9/million output. However, **no 3.5 Flash-Lite exists** â€” the
   Flash-Lite line is at `gemini-3.1-flash-lite`, so the source project's pairing invents a
   variant. `config.yaml` still ships the source project's `vertex_ai/gemini-3.5-flash` /
   `vertex_ai/gemini-3.5-flash-lite` pair; the second one must be replaced before deploying.
