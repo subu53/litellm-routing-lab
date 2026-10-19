@@ -392,14 +392,16 @@ The two over-routed short-easy prompts show the same mechanism from the other si
 model, because both contain technical vocabulary. The keyword dimension fires on the wrong
 signal.
 
-At the interim threshold anything longer than roughly one line crossed to the strong model,
-which is why the 60-prompt set reported 0/31 under-routed. **That number measured length, not
-difficulty.**
+At a measurement threshold of -0.075, anything longer than roughly one line crossed to the
+strong model, which is why the 60-prompt set reported 0/31 under-routed. **That number measured
+length, not difficulty.** Note that -0.075 is a probe applied by the evaluation tool, not the
+shipped config: the shipped defaults never reach the strong model on this set, which is the
+point being made.
 
 **What fires besides length: signals per cell.** `test_length_confound.py` prints the
-classifier's `signals` list for every prompt and a per-cell tally. The observations recorded
-from that run are the only evidence in this project about non-length behaviour, so they are
-reported as observations, not as a model of the scorer.
+classifier's `signals` list for every prompt and a per-cell tally. On the run recorded here
+that tally was not captured, so it is listed as the next thing to look at rather than
+reported as a finding.
 
 **An LLM classifier baseline is available and deliberately not called "the learned
 classifier".** `tools/llm_baseline.py` asks a general-purpose model (Flash-Lite by default)
@@ -420,11 +422,13 @@ classifier, on this workload. Its signals are prompt length, the presence of a "
 style phrase, and a small technical vocabulary; a hard request written conversationally scores
 0.0, the bottom of its scoring range.
 
-**The interim configuration is a length gate, not complexity routing.** At the selected
-threshold the rule is effectively "anything longer than one line goes to the strong model".
-That is safe in one direction only — a long prompt never reaches the cheap model — while
-short hard prompts reach it every time. Under the shipped defaults the opposite holds:
-nothing reaches Flash at all, so the scorer performs no better than "always cheap".
+**What the score is, once you separate length.** At a threshold of -0.075 the effective rule
+is "anything longer than one line goes to the strong model". That is safe in one direction
+only — a long prompt never reaches the cheap model — while short hard prompts reach it every
+time. Under the shipped defaults the opposite holds: nothing reaches the strong model at all,
+so the scorer performs no better than "always cheap". Neither operating point is complexity
+routing. The shipped defaults are what the repository ships, because the interim threshold was
+fitted on pooled data and the sweep showed no threshold separates the classes.
 
 **This says nothing about a learned classifier.** Every result above concerns the free
 built-in heuristic. Whether a trained classifier separates the four 2x2 cells is untested
@@ -553,8 +557,9 @@ about 3 points, so an interval is more honest than a single percentage.
 **Known limits.** One author wrote every prompt, so they share a style real traffic will
 not. Each 2x2 cell holds 10 prompts, so a 10/10 result carries a 95% Wilson interval of
 72-100% — strong but not precise. All results concern the **free built-in heuristic only**;
-whether a learned classifier separates the cells is untested. Boundary values are an interim
-choice, not a validated operating point. Savings in money are unmeasured.
+whether a learned classifier separates the cells is untested. The shipped boundary values are
+the documented defaults, but the held-out half has been read, so any future tuning needs fresh
+prompts. Savings in money are unmeasured.
 
 **These three results are not independent.** The defaults finding, the AUC comparison and the
 2x2 all use one scorer, one author's prompts and one LiteLLM version. Only the 2x2 was built

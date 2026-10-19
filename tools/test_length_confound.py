@@ -26,10 +26,30 @@ PATH = os.path.join(ROOT, "eval", "prompts_2x2.yaml")
 WANT = {"short_hard": "gemini-flash", "long_hard": "gemini-flash",
         "short_easy": "gemini-flash-lite", "long_easy": "gemini-flash-lite"}
 
+# Tier map sent with each classification request, so the tier names resolve to these
+# aliases inside the proxy. SIMPLE is the only tier on the cheap model here, which
+# matches the measurement policy below: the score is cut at THRESHOLD rather than at
+# the config's medium_complex, because the config never reaches the strong model on
+# this set.
 TIERS = {"SIMPLE": "gemini-flash-lite", "MEDIUM": "gemini-flash",
          "COMPLEX": "gemini-flash", "REASONING": "gemini-flash"}
-# The interim threshold t = -0.075 with the tier map in config.gemini.yaml:
-# SIMPLE (cheap) is everything below t; MEDIUM and above are the strong model.
+
+# MEASUREMENT POLICY, deliberately not read from config.gemini.yaml.
+#
+# This tool answers one narrow question: is the classifier score sensitive to prompt
+# difficulty at all, once length is separated? To answer it, any threshold inside the
+# observed score gap will do, so the tool fixes one explicitly and applies it itself
+# rather than depending on a boundary value in a config file.
+#
+# -0.075 was chosen because the offline sweep identified it as the point where nearly
+# every hard prompt reaches the strong model. Using it keeps this table comparable to
+# the 60-prompt numbers in the README.
+#
+# The shipped config does NOT use this threshold. config.gemini.yaml runs at the
+# documented defaults (0.15 / 0.35 / 0.60) with MEDIUM on the cheap tier, under which
+# no prompt in this set reaches the strong model and this test cannot run at all.
+# So this is a probe of the score's behaviour, not a description of production routing.
+# If the config's boundary ever changes, this constant does not follow it - deliberately.
 THRESHOLD = -0.075
 
 
@@ -87,7 +107,9 @@ def main():
 
     cells = load()
     print("2x2 length/hardness confound test")
-    print(f"interim threshold t={THRESHOLD}: SIMPLE (cheap) below t, strong at or above\n")
+    print(f"measurement threshold t={THRESHOLD}: score below t is treated as cheap, "
+          "at or above as strong.")
+    print("This is a probe of the classifier score, not the shipped routing config.\n")
 
     counts = {}
     signals_by_cell = {}
