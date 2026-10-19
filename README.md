@@ -210,6 +210,19 @@ middle-of-plateau rule, **0.25** was chosen and confirmed once on the 30 held-ou
 
 **The tuning gain did not transfer.** On held-out the two configurations are identical.
 
+**Under the shipped defaults the router sent zero prompts to Flash.** All 60 scores are at
+or below 0.175 while `medium_complex` is 0.35, so on this evaluation set the shipped router
+behaved as **always Flash-Lite**. There was no routing decision being made; "0/30
+over-routed" is arithmetic, not a quality result, because every boundary tested (0.20 and
+above) sat above every observed score.
+
+**The grid itself had a gap.** Boundaries below 0.20 were not tested, so nothing tested a
+threshold under 0.175 — which is exactly where the misroutes live. `simple_medium` and
+`medium_complex` both map to the cheap model, so moving them together changes no model
+choice; the earlier sweep wrongly treated the label-ordering constraint as a floor on the
+usable threshold. `tools/sweep_thresholds.py` fixes this by scoring each prompt once and
+evaluating every midpoint between observed scores offline.
+
 ### Why the boundary cannot help
 
 Every under-routed held-out prompt scored **0.0, -0.05, or 0.175**. The `COMPLEX` tier

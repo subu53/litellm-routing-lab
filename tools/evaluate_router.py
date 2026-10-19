@@ -21,6 +21,7 @@ Usage:
   python3 tools/evaluate_router.py --sweep            # sweep medium_complex
   python3 tools/evaluate_router.py --keywords         # include custom keywords
 """
+import csv
 import json
 import os
 import sys
@@ -250,6 +251,50 @@ def preflight(base_url, api_key):
     print(f"preflight OK: {base_url} is classifying requests")
 
 
+def dump_scores(base_url, api_key, path):
+    """Score every prompt once and write CSV: id,split,label,score.
+
+    A prompt's score does not depend on the boundaries, so one pass is enough to
+    evaluate every possible threshold offline. label is 'hard' when the expected
+    model is Flash and 'easy' otherwise - that is the only distinction the router
+    can actually act on, since SIMPLE/MEDIUM share a model and COMPLEX/REASONING
+    share a model.
+    """
+    prompts = load_prompts()
+    rows = []
+    for split in ("tuning", "held_out"):
+        for index, item in enumerate(prompts[split], 1):
+            body = classify(base_url, api_key, item["text"], DEFAULT_BOUNDARIES)
+            decision = body.get("routing_decision", {})
+            score = decision.get("score")
+            if score is None:
+                raise SystemExit(f"no score returned for {item['text'][:50]}")
+            label = "hard" if TIERS[item["tier"]] == STRONG else "easy"
+            rows.append({"id": f"{split}-{index:02d}", "split": split,
+                         "label": label, "score": score,
+                         "tier_expected": item["tier"], "text": item["text"]})
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["id", "split", "label",
+                                                    "score", "tier_expected", "text"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+    flash = sum(1 for r in rows
+                if TIERS[r["tier_expected"]] == STRONG
+                and float(r["score"]) >= DEFAULT_BOUNDARIES["medium_complex"])
+    print(f"\nWrote {path}: {len(rows)} prompts")
+    print(f"  scores: min={min(float(r['score']) for r in rows)} "
+          f"max={max(float(r['score']) for r in rows)}")
+    for split in ("tuning", "held_out"):
+        sub = [r for r in rows if r["split"] == split]
+        hard = sum(1 for r in sub if r["label"] == "hard")
+        print(f"  {split}: {len(sub)} prompts, {hard} hard / {len(sub) - hard} easy")
+    print(f"  sent to Flash under shipped defaults "
+          f"(medium_complex={DEFAULT_BOUNDARIES['medium_complex']}): "
+          f"{flash}/{len(rows)}")
+    return rows
+
+
 def sweep(base_url, api_key):
     """Sweep medium_complex on the tuning half, confirm the pick on held-out.
 
@@ -339,6 +384,10 @@ def main():
         raise SystemExit("Set LITELLM_BASE_URL and LITELLM_API_KEY first.")
 
     preflight(base_url, api_key)
+    if "--dump-scores" in sys.argv:
+        out = os.path.join(ROOT, "scores.csv")
+        dump_scores(base_url, api_key, out)
+        return
     if "--sweep" in sys.argv:
         sweep(base_url, api_key)
     else:
