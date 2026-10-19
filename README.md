@@ -254,6 +254,14 @@ this score cannot distinguish them. The score also takes only about eight discre
 across 60 prompts, which indicates a few surface-form detectors firing rather than a graded
 measurement of difficulty.
 
+**The 60-prompt set confounds hardness with length.** Its hard prompts are
+multi-sentence scenarios and its easy prompts are one-liners, so a length gate would score
+well without measuring difficulty. `tools/compare_length.py` reports the AUC of the score
+against the AUC of a plain word count on the same labels; if they are close, the router adds
+nothing beyond sentence count. `eval/prompts_2x2.yaml` and
+`tools/test_length_confound.py` test this directly with 10 prompts in each of four cells
+(short-hard, short-easy, long-hard, long-easy), with pass criteria written into the prompt
+file before the run. Results are reported as measured.
 **Conclusion.** LiteLLM's built-in heuristic is a surface-form detector, not a complexity
 classifier, on this workload. Its signals are prompt length, the presence of a "step by step"
 style phrase, and a small technical vocabulary; a hard request written conversationally scores

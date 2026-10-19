@@ -252,13 +252,16 @@ def preflight(base_url, api_key):
 
 
 def dump_scores(base_url, api_key, path):
-    """Score every prompt once and write CSV: id,split,label,score.
+    """Score every prompt once and write CSV, including length and signals.
 
     A prompt's score does not depend on the boundaries, so one pass is enough to
     evaluate every possible threshold offline. label is 'hard' when the expected
-    model is Flash and 'easy' otherwise - that is the only distinction the router
-    can actually act on, since SIMPLE/MEDIUM share a model and COMPLEX/REASONING
-    share a model.
+    model is Flash and 'easy' otherwise - the only distinction the router can act
+    on, since SIMPLE/MEDIUM share a model and COMPLEX/REASONING share a model.
+
+    `words` and `signals` are recorded so the score can be compared against prompt
+    length. If length predicts the label as well as the score does, the router is
+    adding nothing beyond a length gate on this set.
     """
     prompts = load_prompts()
     rows = []
@@ -270,12 +273,20 @@ def dump_scores(base_url, api_key, path):
             if score is None:
                 raise SystemExit(f"no score returned for {item['text'][:50]}")
             label = "hard" if TIERS[item["tier"]] == STRONG else "easy"
-            rows.append({"id": f"{split}-{index:02d}", "split": split,
-                         "label": label, "score": score,
-                         "tier_expected": item["tier"], "text": item["text"]})
+            rows.append({
+                "id": f"{split}-{index:02d}",
+                "split": split,
+                "label": label,
+                "score": score,
+                "words": len(item["text"].split()),
+                "signals": "; ".join(decision.get("signals", [])),
+                "tier_expected": item["tier"],
+                "text": item["text"],
+            })
     with open(path, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["id", "split", "label",
-                                                    "score", "tier_expected", "text"])
+        writer = csv.DictWriter(handle, fieldnames=["id", "split", "label", "score",
+                                                    "words", "signals",
+                                                    "tier_expected", "text"])
         writer.writeheader()
         writer.writerows(rows)
 

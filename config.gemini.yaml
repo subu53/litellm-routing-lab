@@ -36,9 +36,24 @@ model_list:
       model: auto_router/complexity_router
       complexity_router_default_model: gemini-flash
       complexity_router_config:
+        # Interim operating point at threshold t = -0.075.
+        #
+        # Only t changes a routing decision: SIMPLE and MEDIUM both map to the
+        # cheap model, and COMPLEX and REASONING both map to the strong one. The
+        # mapping below therefore keeps boundaries ordered while making SIMPLE
+        # mean "scored below t", which the offline curve selected by fewest
+        # under-routed prompts.
+        #
+        # This is an INTERIM choice, not a validated one. On the 60-prompt set it
+        # sends 40/60 prompts to Flash, i.e. close to default-strong pricing, and
+        # the length-confound test (eval/prompts_2x2.yaml) has not been run yet.
+        tier_boundaries:
+          simple_medium: -0.075
+          medium_complex: 0.35
+          complex_reasoning: 0.60
         tiers:
           SIMPLE: gemini-flash-lite
-          MEDIUM: gemini-flash-lite
+          MEDIUM: gemini-flash
           COMPLEX: gemini-flash
           REASONING: gemini-flash
         classifier_type: heuristic

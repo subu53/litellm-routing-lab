@@ -1,0 +1,76 @@
+# 2x2 length/hardness confound test.
+#
+# The 60-prompt set confounds difficulty with length: the hard prompts are
+# multi-sentence scenarios and the easy ones are one-liners. A length gate would
+# therefore score well without measuring difficulty.
+#
+# This set crosses the two axes on purpose, ~10 prompts per cell:
+#
+#             SHORT                    LONG
+#   HARD      terse but genuinely      long and genuinely hard
+#             hard requests
+#   EASY      one-line questions       pasted paragraphs that only need
+#                                      a one-line answer
+#
+# PREDICTION, written before running:
+#   - short+hard prompts are under-routed (score near 0 or negative, sent cheap)
+#   - long+easy prompts are over-routed (score positive from length signal)
+# If both hold, the heuristic is measuring length, not difficulty.
+#
+# PASS/FAIL CRITERIA, fixed before running:
+#   The length-gate hypothesis is SUPPORTED if at least 7 of the 10 short+hard
+#   prompts are routed to the cheap model
+#   AND at least 7 of the 10 long+easy prompts are routed to the strong model.
+#   SUPPORTED-but-weak: 5-6 in either cell. REJECTED: 4 or fewer in both.
+#   Any outcome is reported as measured; the criteria are not adjusted afterwards.
+#
+# These prompts are fresh. The 60-prompt held-out half was read once already and
+# is not reused for confirmation.
+
+short_hard:
+  - text: "Why do distributed locks fail under clock skew?"
+  - text: "When is eventual consistency the wrong choice?"
+  - text: "What breaks first when a retry has no backoff?"
+  - text: "Why would a cache make a system slower?"
+  - text: "When does a queue hide a bug instead of absorbing it?"
+  - text: "What makes a rollback unsafe?"
+  - text: "Why can adding replicas reduce availability?"
+  - text: "When is sharding premature?"
+  - text: "What fails silently in a leader election?"
+  - text: "Why is a timeout not a cancellation?"
+
+short_easy:
+  - text: "What does DNS do?"
+  - text: "Name one use for a mutex."
+  - text: "What is a race condition?"
+  - text: "Which is faster, RAM or disk?"
+  - text: "What does API stand for?"
+  - text: "Is UDP reliable?"
+  - text: "What is a checksum for?"
+  - text: "Spell Kubernetes."
+  - text: "What port does SSH use?"
+  - text: "Define idempotent in one sentence."
+
+long_hard:
+  - text: "Our checkout service retries every failed payment three times with no delay, and during last week's outage customers were charged twice while the order status stayed pending. Explain what you would change in the retry and ledger design, in what order, and how you would detect a duplicate charge that already happened before the fix shipped."
+  - text: "Two services each own half of a customer record and both accept writes during a partition. Describe how you would decide which writes win after the partition heals, what you would show the customer in the meantime, and which of those two decisions you would revisit first if you learned the partition lasts hours rather than seconds."
+  - text: "A nightly reconciliation job has been silently dropping rows for six months because a join column changed type. Describe how you would find the full blast radius, how you would prove the fix, and what you would change so that a similar schema change cannot be silent again."
+  - text: "We run one Kubernetes cluster per region and need to fail over within a minute, but our database is single-region and writes take up to eight seconds to replicate. Explain what a realistic failover looks like, what data loss is unavoidable, and how you would communicate the difference between that and the promise we have made to customers."
+  - text: "Our platform team wants to introduce a shared library for logging, metrics, and tracing across forty services. Describe the migration that does not stall at the halfway point, what you would leave optional, and how you would handle the teams that have deliberately diverged from the standard."
+  - text: "A third-party API we depend on for pricing returns intermittent stale values without any error. Explain how you would detect the staleness, what you would do at the point of sale in the meantime, and how you would decide when the vendor's behaviour is bad enough to justify building the pricing data ourselves."
+  - text: "We have a good test suite that takes forty minutes, and engineers are skipping it locally. Explain how you would decide whether to invest in making it faster or in making it smaller, what evidence you would gather first, and how you would know within a month whether the change worked."
+  - text: "Our on-call engineer is paged about three hundred times a month and most pages are noise. Describe the approach you would take to reduce that without missing a real incident, what you would measure to tell whether you are succeeding, and what you would deliberately leave alone."
+  - text: "A regulator wants us to be able to delete a customer's data within seventy-two hours, but the data lives in a warehouse, a search index, and three vendors. Explain how you would approach it, which part is genuinely hardest, and what you would tell the regulator you cannot promise."
+  - text: "Our new feature flags are managed in code but the rollout percentages are set in a dashboard nobody reviews. Explain how you would reconcile the two sources of truth, what you would do about a flag whose dashboard state disagrees with the code, and what you would change so the next feature does not inherit the same split."
+
+long_easy:
+  - text: "Here is a paragraph from our internal handbook: 'Expense reports are due by the fifth of each month. Receipts over fifty pounds require a manager signature. Travel booked more than thirty days ahead qualifies for the standard rate. Late submissions are processed in the following cycle unless finance approves an exception.' Summarise it in one sentence."
+  - text: "The following is from a vendor email: 'Thank you for your continued partnership. We are writing to let you know that as of the first of next month our support hours will change from twenty-four hours to eight in the morning until eight in the evening, Monday to Friday, with weekend cover limited to severity one incidents.' What are the new support hours?"
+  - text: "From our office notice: 'The lift on the east side will be out of service from Monday morning until Wednesday afternoon while the motor is replaced. Please use the west stairs or the main lift. Deliveries scheduled during this period should be routed to the loading bay on level two.' Which entrance should deliveries use?"
+  - text: "A paragraph from our style guide says: 'Use sentence case for all headings. Avoid full stops at the end of headings. Numbers under ten should be written as words in body text but as numerals in tables. Always use the serial comma.' According to this, how should the number seven appear in a table?"
+  - text: "Our landlord wrote: 'Please note that parking permits will not be renewed automatically this year. Tenants who wish to continue parking on site must reapply before the thirty-first of March. Any application received after that date will be placed on a waiting list.' What is the deadline to reapply?"
+  - text: "Here is a section of an onboarding document: 'New starters receive hardware on their first day. Accounts are provisioned two days before the start date. Line managers should request access to any internal tools at least a week in advance. Security training must be completed within thirty days of joining.' When are accounts provisioned?"
+  - text: "From a conference programme: 'Registration opens at eight in the morning in the main foyer. Keynotes run from nine until half past ten in the main hall. Workshops are in the side rooms on level three and require a separate ticket. Lunch is served from half past twelve.' Where are the workshops held?"
+  - text: "A note from payroll reads: 'Pay slips are published on the twenty-fifth of each month. If the twenty-fifth falls on a weekend, they are published on the preceding Friday. Queries about a pay slip must be raised within ten working days of publication.' When are pay slips published if the twenty-fifth is a Saturday?"
+  - text: "The release notes say: 'Version two point four adds support for dark mode, fixes a crash when exporting to PDF, and removes the deprecated settings panel. Users who upgraded from two point two should re-enter their credentials once after updating.' What should upgraders from version 2.2 do?"
+  - text: "From the building security briefing: 'All visitors must sign in at reception and be escorted at all times. Contractors working outside office hours need a separate permit issued by facilities. Photography is not permitted in the server rooms.' Who must be escorted?"
