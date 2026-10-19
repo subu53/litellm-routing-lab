@@ -99,17 +99,33 @@ transfers. The free path never adds a payment method.
 
 ## Checking it offline
 
-No Terraform, gcloud, or Docker is required to run these:
+No Terraform, gcloud, Docker, or API key is required for these:
 
 ```bash
-python tools/check_structure.py   # 270 structural checks, both configs
-python tools/test_checker.py      # 15 negative tests: proves the checker bites
+python tools/check_structure.py      # structural checks across all configs
+python tools/test_checker.py         # 15 negative tests: proves the checker bites
+python tools/test_retry.py           # 8 retry-policy tests
+python tools/test_compare_length.py  # 10 verdict-direction tests
+python tools/check_keywords.py       # keyword leakage guard
 ```
 
 `check_structure.py` verifies balanced HCL delimiters, unterminated strings, project-wide
 resource reference resolution, YAML indentation, that all four router tiers point at
 declared aliases, that exactly one valid classifier is configured, that a non-Jev config
 carries no stale Jev settings, and that `benchmark.py` still exposes `run_case`/`main`.
+
+`test_compare_length.py` exists because the length-versus-score verdict once reported a win
+for the classifier at 0.725 against 1.000. Those tests pin the direction of every comparison.
+
+Evaluating the router needs a running proxy and a key, but spends no completion requests:
+
+```bash
+python tools/evaluate_router.py --dump-scores   # scores all 60 prompts once
+python tools/sweep_thresholds.py scores.csv     # every threshold candidate, offline
+python tools/compare_length.py scores.csv       # score AUC vs word-count AUC
+python tools/test_length_confound.py            # pre-registered 2x2 test
+python tools/test_routing.py --keywords         # four benchmark cases, both configs
+```
 
 **It is not `terraform validate`** — provider schema errors can still slip through. It
 catches the failure class that matters for hand-assembled config: the typo that costs you
