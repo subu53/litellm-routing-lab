@@ -5,9 +5,12 @@ model_list:
   # The challenge's other model, gemini-3.5-flash-lite, does not exist - the
   # Flash-Lite line is at 3.1, so that is used for the cheap tier.
   #
-  # NOTE: per-model free-tier limits apply. Gemini 3 Flash is 20 requests/day,
-  # so run the benchmark twice at most before the quota tightens. Flash-Lite
-  # allows 500/day, and MEDIUM routes there, which is the point of the exercise.
+  # Tier boundaries are left at the shipped defaults (0.15 / 0.35 / 0.60).
+  # Lowering medium_complex to 0.25 was measured to be harmful: the heuristic
+  # scorer rates reasoning prompts around 0.175, which sits ABOVE a 0.10 boundary
+  # and BELOW a 0.25 boundary, so a lowered boundary pulls a mid-range score DOWN
+  # into the cheap tier. At the default 0.35 the same prompt reaches COMPLEX and
+  # is served by the strong model. Do not tune these without measuring first.
   - model_name: gemini-flash-lite
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
@@ -37,10 +40,6 @@ model_list:
         classifier_context_budget_chars: 8000
         classifier_context_include_assistant_turns: false
         return_raw_model_name: true
-        tier_boundaries:
-          simple_medium: 0.10
-          medium_complex: 0.25
-          complex_reasoning: 0.45
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

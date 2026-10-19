@@ -184,11 +184,37 @@ reasoning prompt whose measured latency differed by **10×** (1,525 ms vs 15,392
 That spread is the waste this project targets, and it is measured rather than assumed.
 
 **What this does not show.** The heuristic scorer sent **all four prompts to the cheap
-tier**, including the REASONING case, so `gemini-3.5-flash` was never selected by the
-router and has no routed-path latency here. The 33% average latency drop is therefore
-"a smaller model was used for everything", not evidence of correct complexity routing.
-Lowering `tier_boundaries` from the documented defaults to 0.10/0.25/0.45 did not
-change this.
+tier**, so `gemini-3.5-flash` was never selected and has no routed-path latency here.
+The 33% average latency drop is therefore "a smaller model was used for everything",
+not evidence of correct complexity routing.
+
+**Why it happened — measured, not guessed.** `POST /auto_router/test_routing` reports the
+classifier's actual decision without spending a completion:
+
+```json
+{"routed_model": "gemini-flash-lite", "routing_decision": {
+  "cause": "heuristic_scorer", "tier": "MEDIUM", "score": 0.175,
+  "signals": ["reasoning (step by step)"],
+  "tier_boundaries": {"simple_medium": 0.10, "medium_complex": 0.25,
+                      "complex_reasoning": 0.45}}}
+```
+
+The scorer rated the REASONING prompt at **0.175**. At the **documented defaults**
+(`0.15 / 0.35 / 0.60`) that score reaches **COMPLEX** and would have been served by
+`gemini-3.5-flash`. With the lowered `medium_complex: 0.25` it fell to **MEDIUM** and
+went to Flash-Lite.
+
+So the misrouting was caused by this repository's own boundary tuning, not by the
+classifier alone. Lowering a boundary pulls mid-range scores *down* into cheaper tiers,
+which is the opposite of the intended effect. The override has been removed and both
+free configs now use the shipped defaults. **Re-run `benchmark.py routed` after pulling
+to see the corrected routing.**
+
+An earlier revision of this project also shipped `tools/explain_scoring.py`, a replica of
+the scorer built from the documentation. It predicted 0.800 for the same prompt the real
+router scored at 0.175, because the shipped keyword lists and dimension scoring are not
+published. It has been replaced by `tools/test_routing.py`, which queries the real
+classifier.
 
 **Two measurement caveats.** The `simple` routed case at 7,573 ms is 5× its baseline and
 consistent with provider cold start rather than routing overhead, so case 1 of a run is
