@@ -1,82 +1,155 @@
 # LiteLLM Routing Lab
 
-A cost-aware AI gateway that routes each request to the cheapest Gemini model that can
-actually handle it — with measured latency and spend evidence rather than intuition.
+A cost-aware AI gateway that routes each request to a cheaper or stronger model by
+predicting how much reasoning it needs — and a measured evaluation of whether that
+prediction actually works.
 
-Deployed on Google Cloud Run, backed by Cloud SQL PostgreSQL, and configured entirely
-as code.
+**The evaluation found that it does not.** LiteLLM's free built-in classifier behaves as a
+prompt-length gate on this workload, not a complexity classifier. That finding, together
+with the controlled test that produced it, is the substance of this repository.
+
+## Status
+
+| Component | State |
+|---|---|
+| Gateway running locally against free-tier Gemini | **Built and run** |
+| Router evaluation, 100 labelled prompts, held-out split | **Run; results below** |
+| Benchmark harness, retry logic, offline checks | **Run** |
+| GCP deployment (`main.tf`: Cloud Run, Cloud SQL, Vertex AI) | **Written, never applied** |
+| Paid Jev classifier path | **Configured, never run — no TypeSafe key** |
+
+Nothing here has been deployed to Google Cloud, and `main.tf` has never passed
+`terraform validate`. The sections below label what is measured, what is only configured,
+and what is untested.
+
+## Author
+
+**Sammy S Mutuku**
+
+- GitHub: [@subu53](https://github.com/subu53)
+- LinkedIn: [linkedin.com/in/your-profile](https://www.linkedin.com/in/your-profile)
+- Kaggle: [sammyssbu](https://www.kaggle.com/sammyssbu)
 
 ## The problem
 
-A company ships an AI feature and sends every request to the strongest model. Simple
-prompts ("reply with the word blue") and genuinely hard ones ("reason about when to
-choose queues over synchronous APIs") cost exactly the same. As traffic grows, so does
-the waste.
+A company ships an AI feature and sends every request to the strongest model. A one-word
+lookup ("reply with the word blue") and a design tradeoff ("reason about when to choose
+queues over synchronous APIs") cost exactly the same. As traffic grows, so does the waste.
 
-This project measures that waste, then removes it.
+The obvious fix is to classify each request and route cheap work to a cheap model. This
+project builds that gateway, then tests whether the classification can be trusted.
 
 ## Architecture
 
+Two configurations ship and they are separate deployments. The one that was **evaluated** is
+the local free path. The one that is **written but unapplied** is the GCP path.
+
 ```
-                            â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-  benchmark.py â”€â”€POSTâ”€â”€â”€â”€â”€â”€â–¶â”‚  Cloud Run: litellm-      â”‚
-  (4 fixed prompts)         â”‚  gateway  (public, TLS)   â”‚
-                            â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                                         â”‚ virtual key auth + budget
-                                         â–¼
-                            â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                            â”‚  LiteLLM proxy 1.104.0   â”‚
-                            â”‚  model_list in config    â”‚
-                            â””â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”˜
-              model: jev-router â”‚                  â”‚ model: gemini-flash
-                                â–¼                  â–¼
-                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                    â”‚ complexity_router â”‚   â”‚   Vertex AI  â”‚
-                    â”‚ classifier: jev   â”‚   â”‚  Gemini 3.5  â”‚
-                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜   â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                              â”‚ SIMPLE / MEDIUM / COMPLEX / REASONING
-                              â–¼
-                    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-                    â”‚ Flash-Lite  â† SIMPLE, MEDIUM  â”‚
-                    â”‚ Flash       â† COMPLEX, REASON â”‚
-                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+  EVALUATED PATH (local, no billing account)
+  ---------------------------------------------------------------
+
+    benchmark.py                 tools/evaluate_router.py
+    tools/test_length_confound.py
+           |                              |
+           v                              v
+    +-----------------------------------------------------+
+    |  LiteLLM proxy 1.104.0  on localhost:4000           |
+    |  config.gemini.yaml  --  model_list aliases:        |
+    |    gemini-flash-lite -> Gemini 3.1 Flash-Lite       |
+    |    gemini-flash      -> Gemini 3.5 Flash            |
+    |    jev-router        -> auto_router/                |
+    |                         complexity_router           |
+    +-----------------------------------------------------+
+             |                              |
+             | alias call                   | router call
+             v                              v
+    +----------------------+      +------------------------+
+    | Google AI Studio     |      | built-in heuristic     |
+    | Gemini API           |      | scorer, local and free, |
+    | (free tier, key in   |      | no network call: scores |
+    |  the environment)    |      | 7 weighted dimensions   |
+    +----------------------+      | then maps to a tier     |
+                                  +------------------------+
+                                               |
+                               tier -> alias -> model
+                               below threshold  -> cheap model
+                               at or above      -> strong model
 ```
 
-Persistence layer: Cloud SQL PostgreSQL 15 stores virtual keys, router config, request
-logs, and spend records, mounted into the container at `/cloudsql`.
+```
+  UNTESTED PATH (GCP, written but never applied)
+  ---------------------------------------------------------------
+
+    benchmark.py --> Cloud Run (public, TLS) --> LiteLLM proxy
+                                                     |
+                               +---------------------+------------------+
+                               |                                        |
+                        jev-router                               gemini aliases
+                               |                                        |
+                        TypeSafe Jev                            Vertex AI Gemini
+                        (needs API key)                         (gemini-3.5-flash)
+                               |
+                     Cloud SQL PostgreSQL 15, mounted at /cloudsql:
+                     virtual keys, router config, request logs, spend records
+```
+
+**Why two paths.** The GCP path needs a billing account with a card on file, which was not
+available during this work. The local path needs only a free Google AI Studio key, so it
+was the path that could actually be exercised. Every measured result below comes from the
+local path; the GCP path is infrastructure as code that has never been applied.
+
+**The alias `jev-router` is a legacy label.** In the evaluated config the classifier behind
+it is `classifier_type: heuristic`, not Jev. The alias is kept because the router tiers and
+`benchmark.py` reference it, and renaming would churn three configs without changing
+behaviour.
 
 ## What makes it interesting
 
 **The routing decision is inspectable.** `return_raw_model_name: true` means a routed
-response reports the concrete Gemini deployment that actually served it, not the alias
-`jev-router`. Routing stops being a black box.
+response reports the concrete model that actually served it, not the alias `jev-router`.
+That is what made the evaluation possible: every call records which model answered, so the
+router's behaviour could be measured instead of inferred.
 
-**Classifier failure degrades safely.** `circuit_breaker_enabled: true` with a 30-second
-cooldown, plus `classifier_fallback: default_model`, means a Jev outage sends traffic to
-the default strong model rather than breaking requests. It fails toward correctness.
+**The evaluation is adversarial to its own conclusion.** Scores were collected once and
+every threshold midpoint was then evaluated offline, a length baseline was computed as a
+direct competitor to the classifier, and a 2x2 test was designed to break the finding with
+pre-registered criteria. The classifier did not survive it. That is the result.
 
-**Secrets never enter the image.** The master key, salt key, and database URL are
-generated by Terraform, written to Secret Manager, and injected at runtime. Credentials
-exist in no file and no image layer.
+**The harness is classifier-agnostic.** `test_length_confound.py` and
+`evaluate_router.py --dump-scores` only need a working `POST /auto_router/test_routing`
+endpoint, so the same four-cell table could be produced for a paid classifier and compared
+against this one. That comparison has not been run.
 
-**Spend is capped, not just observed.** A `$1` virtual-key budget acts as a hard
-guardrail; exceeding it is expected to return HTTP 422. (Not yet confirmed against a live
-deployment — see the runbook's Secret Mission step.)
+**Classifier failure degrades safely** *(configured, untested)*. `classifier_fallback:
+default_model` sends an undecidable request to the strong model, which fails toward quality
+rather than toward cheap. `circuit_breaker_enabled` with a cooldown applies to the LLM and
+Jev classifiers; the heuristic scorer runs locally and has no breaker to trip.
+
+**Secrets never enter the image** *(configured, untested)*. On the GCP path the master key,
+salt key, and database URL are generated by Terraform, written to Secret Manager, and
+injected at runtime, so no credential exists in a file or an image layer.
+
+**Spend controls are documented but not demonstrated.** The paid runbook describes a `$1`
+virtual-key budget expected to return HTTP 422 when exhausted. Neither free config sets a
+budget, and the `422` behaviour has never been observed against a running key. It is
+recorded as a runbook step, not a verified guarantee.
 
 ## Two ways to run this
 
-| | Paid path | Free path |
+| | Paid path (never run here) | Free path (what was evaluated) |
 |---|---|---|
 | Guide | [`RUNBOOK.md`](RUNBOOK.md) | [`LOCAL-RUNBOOK.md`](LOCAL-RUNBOOK.md) |
-| Models | Vertex AI Gemini (needs GCP billing) | Groq free tier (no card) |
-| Classifier | Jev via TypeSafe (paid) | built-in heuristic scorer (free) |
+| Models | Vertex AI Gemini (needs GCP billing) | Google AI Studio free tier, no card |
+| Classifier | Jev via TypeSafe (paid, needs a key) | built-in heuristic scorer (free, local) |
 | State | Cloud SQL Postgres | in-process |
 | Deployment | Cloud Run via Terraform | local process on :4000 |
-| Cost | ~$5 | **$0** |
-| Proves | cloud deployment + routing | routing + cost evidence |
+| Cost | ~$5, never incurred | **$0** |
+| State of evidence | written, unapplied | **measured results below** |
 
 Both share `benchmark.py` and the same router semantics, so the measurement method
-transfers. The free path never adds a payment method.
+transfers. The free path never adds a payment method. `config.free.yaml` is a third
+variant using Groq's free tier; it was written before the Gemini key was available and is
+kept for anyone whose Groq catalogue differs.
 
 ## Repository layout
 
@@ -561,12 +634,19 @@ gcloud secrets delete typesafe-api-key   # created outside Terraform
   - `config.yaml` (paid, Vertex AI): `vertex_ai/gemini-*`
   - `config.free.yaml` (free, Groq): `groq/openai/gpt-oss-20b` / `groq/openai/gpt-oss-120b`
   - `config.gemini.yaml` (free, Gemini API): `gemini/gemini-3.1-flash-lite` / `gemini/gemini-3-flash`
-- **Nothing was validated locally beyond syntax.** This repository was authored on Windows
-  with no `terraform`, `gcloud`, or `docker` available. `main.tf` has **not** passed
-  `terraform validate`, and no `terraform plan` or `apply` has been run. Treat the first
-  `terraform validate` in Cloud Shell as the real check.
-- `terraform.tfvars`, `*.tfstate`, and `benchmark-*.csv` are gitignored. No credentials
-  are committed.
+- **What is and is not verified.** The local free path was run end to end: the proxy started,
+  requests were answered by Gemini, and roughly 4,000 classification calls were made across
+  the evaluation. The GCP path was not: `main.tf` has **never** passed `terraform validate`,
+  and no `terraform plan` or `apply` has been run, because the project had no billing account
+  with a card attached. Treat the first `terraform validate` in Cloud Shell as the real check
+  of the infrastructure code. This repository was authored on Windows, where `terraform`,
+  `gcloud`, and `docker` are not installed.
+- **Every measured number comes from one machine, one LiteLLM version (1.104.0) and one
+  free-tier Gemini key.** `eval/archive_results.sh` records those versions alongside the
+  results so a reader can tell what would need to match to reproduce them.
+- `terraform.tfvars`, `*.tfstate`, `benchmark-*.csv`, root `scores.csv`, and root
+  `llm_baseline.csv` are gitignored; archived evidence under `eval/results/` is committed on
+  purpose. No credentials are committed.
 
 ## Built from
 
